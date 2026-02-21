@@ -196,6 +196,8 @@ select_language_interactive() {
     echo "  3) multiple       - Specify multiple languages (e.g., Chinese + English)" >&2
 
     read -p "Select mode (1-3, default: 1): " MODE_CHOICE >&2
+    # Clean input (remove whitespace, newlines)
+    MODE_CHOICE=$(echo "$MODE_CHOICE" | tr -d '[:space:]')
 
     case $MODE_CHOICE in
         1|"")
@@ -214,6 +216,8 @@ select_language_interactive() {
             echo "  7) other - Enter custom language code" >&2
 
             read -p "Select language (1-7): " LANG_CHOICE >&2
+            # Clean input (remove whitespace, newlines)
+            LANG_CHOICE=$(echo "$LANG_CHOICE" | tr -d '[:space:]')
             local SELECTED_LANG=""
             case $LANG_CHOICE in
                 1) SELECTED_LANG="en" ;;
@@ -222,7 +226,7 @@ select_language_interactive() {
                 4) SELECTED_LANG="ko" ;;
                 5) SELECTED_LANG="fr" ;;
                 6) SELECTED_LANG="de" ;;
-                7) read -p "Enter language code (e.g., 'es', 'ru', 'pt'): " SELECTED_LANG >&2 ;;
+                7) read -p "Enter language code (e.g., 'es', 'ru', 'pt'): " SELECTED_LANG >&2; SELECTED_LANG=$(echo "$SELECTED_LANG" | tr -d '[:space:]') ;;
                 *) SELECTED_LANG="en" ;;  # Default to English
             esac
 
@@ -230,6 +234,7 @@ select_language_interactive() {
             local SIMPLIFIED=""
             if [ "$SELECTED_LANG" = "zh" ]; then
                 read -p "Convert to Simplified Chinese? (y/n, default: y): " SIMPLIFY_INPUT >&2
+                SIMPLIFY_INPUT=$(echo "$SIMPLIFY_INPUT" | tr -d '[:space:]')
                 if [[ "$SIMPLIFY_INPUT" =~ ^[Nn]$ ]]; then
                     echo "zh:no"
                 else
@@ -260,6 +265,8 @@ select_language_interactive() {
                 echo "  8) Done adding languages" >&2
 
                 read -p "Select option (1-8): " MULTI_CHOICE >&2
+                # Clean input (remove whitespace, newlines)
+                MULTI_CHOICE=$(echo "$MULTI_CHOICE" | tr -d '[:space:]')
                 case $MULTI_CHOICE in
                     1) LANGUAGES_ARRAY+=("en") ;;
                     2) LANGUAGES_ARRAY+=("zh") ;;
@@ -267,7 +274,7 @@ select_language_interactive() {
                     4) LANGUAGES_ARRAY+=("ko") ;;
                     5) LANGUAGES_ARRAY+=("fr") ;;
                     6) LANGUAGES_ARRAY+=("de") ;;
-                    7) read -p "Enter language code: " CUSTOM_LANG >&2 && LANGUAGES_ARRAY+=("$CUSTOM_LANG") ;;
+                    7) read -p "Enter language code: " CUSTOM_LANG >&2; CUSTOM_LANG=$(echo "$CUSTOM_LANG" | tr -d '[:space:]'); LANGUAGES_ARRAY+=("$CUSTOM_LANG") ;;
                     8) break ;;
                     *) echo "Please enter 1-8" >&2 ;;
                 esac
@@ -289,6 +296,7 @@ select_language_interactive() {
                 # For Chinese, ask about simplified Chinese
                 if [ "$SINGLE_LANG" = "zh" ]; then
                     read -p "Convert to Simplified Chinese? (y/n, default: y): " SIMPLIFY_INPUT >&2
+                    SIMPLIFY_INPUT=$(echo "$SIMPLIFY_INPUT" | tr -d '[:space:]')
                     if [[ "$SIMPLIFY_INPUT" =~ ^[Nn]$ ]]; then
                         echo "zh:no"
                     else
@@ -303,6 +311,7 @@ select_language_interactive() {
                 # Check if Chinese is in the list
                 if [[ " ${LANGUAGES_ARRAY[*]} " =~ " zh " ]]; then
                     read -p "Convert Chinese to Simplified Chinese? (y/n, default: y): " SIMPLIFY_INPUT >&2
+                    SIMPLIFY_INPUT=$(echo "$SIMPLIFY_INPUT" | tr -d '[:space:]')
                     if [[ "$SIMPLIFY_INPUT" =~ ^[Nn]$ ]]; then
                         echo "$MULTI_LANGS:no"
                     else
