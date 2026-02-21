@@ -163,6 +163,7 @@ class SimpleWhisper:
         Args:
             audio_path (str): Path to audio file
             language (str): Language code (e.g., 'en', 'zh'). If None, auto-detect.
+                           Special value 'zh+en' for Chinese-English bilingual content.
 
         Returns:
             dict: Transcription result with text, segments, language, etc.
@@ -185,11 +186,28 @@ class SimpleWhisper:
             _, probs = self.model.detect_language(mel)
             detected_language = max(probs, key=probs.get)
 
-            if language is None:
+            # Handle special language codes
+            original_language = language
+            if language == "zh+en":
+                # For Chinese-English bilingual content
+                print("Bilingual mode: Chinese-English")
+                zh_prob = probs.get("zh", 0.0)
+                en_prob = probs.get("en", 0.0)
+
+                print(f"Chinese probability: {zh_prob:.2f}")
+                print(f"English probability: {en_prob:.2f}")
+
+                # Use auto-detection for bilingual content
+                # Whisper's auto-detection handles mixed languages better
+                language = None
+            elif language is None:
                 language = detected_language
 
             print(f"Detected language: {detected_language} (confidence: {probs[detected_language]:.2f})")
-            print(f"Transcribing in language: {language}")
+            if original_language == "zh+en":
+                print(f"Transcribing in language: auto (bilingual Chinese-English)")
+            else:
+                print(f"Transcribing in language: {language if language else 'auto'}")
 
             # Decode audio
             options = whisper.DecodingOptions(language=language, fp16=False)
@@ -264,7 +282,7 @@ def main():
 
     # Language options
     parser.add_argument("--language", type=str,
-                       help="Language code for transcription (e.g., 'en', 'zh'). Auto-detected if not specified.")
+                       help="Language code for transcription (e.g., 'en', 'zh', 'zh+en' for bilingual Chinese-English). Auto-detected if not specified.")
 
     # Device options
     parser.add_argument("--device", type=str,
@@ -344,7 +362,9 @@ def main():
     if saved_path:
         print(f"- Transcription: {saved_path}")
     print(f"- Model: {args.model}")
-    print(f"- Language: {result.get('language', 'unknown')}")
+    # Show original language parameter or detected language
+    display_language = args.language if args.language else result.get('language', 'auto')
+    print(f"- Language: {display_language}")
 
 if __name__ == "__main__":
     main()

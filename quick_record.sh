@@ -144,19 +144,21 @@ fi
 # Language selection
 if [ -z "$LANGUAGE" ]; then
     echo -e "\n${BLUE}Language Selection:${NC}"
-    echo "  1) auto    - Automatic language detection (recommended)"
-    echo "  2) en      - English"
-    echo "  3) zh      - Chinese"
-    echo "  4) ja      - Japanese"
-    echo "  5) other   - Enter custom language code"
+    echo "  1) auto         - Automatic language detection (recommended for mixed languages)"
+    echo "  2) en           - English only"
+    echo "  3) zh           - Chinese only"
+    echo "  4) zh+en        - Chinese and English (for bilingual content)"
+    echo "  5) ja           - Japanese"
+    echo "  6) other        - Enter custom language code"
 
-    read -p "Select language (1-5, default: 1): " LANG_CHOICE
+    read -p "Select language (1-6, default: 1): " LANG_CHOICE
     case $LANG_CHOICE in
-        1) LANGUAGE="" ;;  # Empty for auto detection
+        1|"") LANGUAGE="" ;;  # Empty for auto detection
         2) LANGUAGE="en" ;;
         3) LANGUAGE="zh" ;;
-        4) LANGUAGE="ja" ;;
-        5) read -p "Enter language code (e.g., 'ko', 'fr', 'de'): " LANGUAGE ;;
+        4) LANGUAGE="zh+en" ;;  # Special code for bilingual
+        5) LANGUAGE="ja" ;;
+        6) read -p "Enter language code (e.g., 'ko', 'fr', 'de'): " LANGUAGE ;;
         *) LANGUAGE="" ;;  # Default to auto detection
     esac
 fi
@@ -207,15 +209,19 @@ fi
 # Computation device selection
 if [ -z "$DEVICE" ]; then
     echo -e "\n${BLUE}Computation Device Selection:${NC}"
-    echo "  cpu  - Use CPU (default)"
-    echo "  mps  - Use Apple Silicon GPU (M1/M2/M3)"
-    echo "  cuda - Use NVIDIA GPU (CUDA)"
-    read -p "Select device [cpu/mps/cuda] (press Enter for cpu): " DEVICE_INPUT
-    if [ -n "$DEVICE_INPUT" ]; then
-        DEVICE="$DEVICE_INPUT"
-    else
-        DEVICE="cpu"
-    fi
+    echo "  1) cpu   - Use CPU"
+    echo "  2) mps   - Use Apple Silicon GPU (M1/M2/M3)"
+    echo "  3) cuda  - Use NVIDIA GPU (CUDA)"
+
+    while true; do
+        read -p "Select device (1-3, default: 1): " DEVICE_CHOICE
+        case $DEVICE_CHOICE in
+            1|"") DEVICE="cpu"; break ;;
+            2) DEVICE="mps"; break ;;
+            3) DEVICE="cuda"; break ;;
+            *) echo "Please enter a number 1-3 or press Enter for default" ;;
+        esac
+    done
 fi
 
 echo ""
