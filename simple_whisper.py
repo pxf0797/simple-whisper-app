@@ -16,6 +16,14 @@ import whisper
 from pathlib import Path
 from datetime import datetime
 
+# Try to import streaming module (optional)
+try:
+    from stream_whisper import StreamWhisper
+    HAS_STREAM = True
+except ImportError:
+    HAS_STREAM = False
+    StreamWhisper = None
+
 
 def list_audio_devices():
     """List all available audio input devices."""
@@ -156,7 +164,7 @@ class SimpleWhisper:
 
         return output_path
 
-    def transcribe_audio(self, audio_path, language=None):
+    def transcribe_audio(self, audio_path, language=None, simplified_chinese=None):
         """
         Transcribe audio file using Whisper.
 
@@ -164,6 +172,8 @@ class SimpleWhisper:
             audio_path (str): Path to audio file
             language (str): Language code (e.g., 'en', 'zh'). If None, auto-detect.
                            Special value 'zh+en' for Chinese-English bilingual content.
+                           'multi:lang1,lang2' for multiple language hints.
+            simplified_chinese (str): Convert Chinese to simplified Chinese ('yes' or 'no')
 
         Returns:
             dict: Transcription result with text, segments, language, etc.
@@ -173,6 +183,9 @@ class SimpleWhisper:
             return None
 
         print(f"Transcribing audio: {audio_path}")
+
+        # Store simplified_chinese setting in result for later use
+        simplified_chinese_setting = simplified_chinese
 
         try:
             # Load audio and pad/trim to fit 30 seconds
@@ -188,7 +201,24 @@ class SimpleWhisper:
 
             # Handle special language codes
             original_language = language
-            if language == "zh+en":
+            multi_languages = []
+
+            if language and language.startswith("multi:"):
+                # Multiple languages hint
+                multi_lang_str = language[6:]  # Remove "multi:" prefix
+                multi_languages = multi_lang_str.split(',')
+                print(f"Multiple language hint: {', '.join(multi_languages)}")
+
+                # Show probabilities for hinted languages
+                for lang in multi_languages:
+                    prob = probs.get(lang, 0.0)
+                    print(f"  {lang} probability: {prob:.2f}")
+
+                # Use auto-detection for multiple languages
+                language = None
+                print("Using auto-detection for multiple languages")
+
+            elif language == "zh+en":
                 # For Chinese-English bilingual content
                 print("Bilingual mode: Chinese-English")
                 zh_prob = probs.get("zh", 0.0)
@@ -204,7 +234,17 @@ class SimpleWhisper:
                 language = detected_language
 
             print(f"Detected language: {detected_language} (confidence: {probs[detected_language]:.2f})")
-            if original_language == "zh+en":
+
+            # Show simplified Chinese setting if applicable
+            if simplified_chinese_setting and (language == "zh" or "zh" in multi_languages or original_language == "zh+en"):
+                if simplified_chinese_setting == "yes":
+                    print("Will convert Chinese text to simplified Chinese")
+                else:
+                    print("Keeping original Chinese text format")
+
+            if original_language and original_language.startswith("multi:"):
+                print(f"Transcribing in language: auto (multiple languages: {', '.join(multi_languages)})")
+            elif original_language == "zh+en":
                 print(f"Transcribing in language: auto (bilingual Chinese-English)")
             else:
                 print(f"Transcribing in language: {language if language else 'auto'}")
@@ -215,6 +255,10 @@ class SimpleWhisper:
 
             # Get full transcription
             transcription_result = self.model.transcribe(audio_path, language=language)
+
+            # Add simplified_chinese setting to result for save_transcription
+            transcription_result["simplified_chinese"] = simplified_chinese_setting
+            transcription_result["original_language_param"] = original_language
 
             return transcription_result
 
@@ -243,11 +287,41 @@ class SimpleWhisper:
             output_path = f"{base_name}_transcription.txt"
 
         try:
+            # Get text and segments
+            text = result.get("text", "")
+            segments = result.get("segments", [])
+            simplified_chinese = result.get("simplified_chinese")
+
+            # Convert to simplified Chinese if requested
+            if simplified_chinese == "yes" and text:
+                # Check if text contains Chinese characters
+                import re
+                has_chinese = re.search(r'[\u4e00-\u9fff]', text)
+
+                if has_chinese:
+                    try:
+                        # Try to import zhconv for conversion
+                        import zhconv
+                        text = zhconv.convert(text, 'zh-cn')
+                        print("Converted Chinese text to simplified Chinese")
+
+                        # Also convert segment texts
+                        for segment in segments:
+                            if 'text' in segment:
+                                segment_text = segment['text']
+                                if re.search(r'[\u4e00-\u9fff]', segment_text):
+                                    segment['text'] = zhconv.convert(segment_text, 'zh-cn')
+                    except ImportError:
+                        print("Warning: zhconv library not installed. Cannot convert to simplified Chinese.")
+                        print("Install with: pip install zhconv")
+                    except Exception as conv_e:
+                        print(f"Warning: Error converting to simplified Chinese: {conv_e}")
+
             with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(result["text"])
-                if "segments" in result:
+                f.write(text)
+                if segments:
                     f.write("\n\n--- Detailed Segments ---\n")
-                    for segment in result["segments"]:
+                    for segment in segments:
                         f.write(f"[{segment['start']:.2f}s - {segment['end']:.2f}s]: {segment['text']}\n")
 
             print(f"Transcription saved to: {output_path}")
@@ -269,6 +343,8 @@ def main():
     # Recording options
     parser.add_argument("--record", action="store_true",
                        help="Record audio from microphone")
+    parser.add_argument("--stream", action="store_true",
+                       help="Stream audio in real-time (requires stream_whisper module)")
     parser.add_argument("--duration", type=float,
                        help="Recording duration in seconds (for --record)")
     parser.add_argument("--audio", type=str,
@@ -282,13 +358,20 @@ def main():
 
     # Language options
     parser.add_argument("--language", type=str,
-                       help="Language code for transcription (e.g., 'en', 'zh', 'zh+en' for bilingual Chinese-English). Auto-detected if not specified.")
+                       help="Language code for transcription (e.g., 'en', 'zh', 'zh+en' for bilingual Chinese-English, 'multi:lang1,lang2' for multiple language hints). Auto-detected if not specified.")
+    parser.add_argument("--simplified-chinese", type=str, choices=["yes", "no"],
+                       help="Convert Chinese text to simplified Chinese (yes/no).")
 
     # Device options
     parser.add_argument("--device", type=str,
                        help="Device to run model on (cpu, cuda, mps). Auto-detected if not specified.")
     parser.add_argument("--input-device", type=int,
                        help="Audio input device ID for recording. Use --list-audio-devices to see available devices.")
+    # Streaming options
+    parser.add_argument("--chunk-duration", type=float, default=3.0,
+                       help="Chunk duration in seconds for streaming (default: 3.0)")
+    parser.add_argument("--overlap", type=float, default=1.0,
+                       help="Overlap between chunks in seconds for streaming (default: 1.0)")
     parser.add_argument("--list-audio-devices", action="store_true",
                        help="List available audio input devices and exit.")
 
@@ -299,16 +382,16 @@ def main():
         list_audio_devices()
         return
 
-    # Check if either recording or audio file is provided
-    if not args.record and not args.audio:
-        print("Either --record or --audio must be specified.")
+    # Check if either recording, audio file, or streaming is provided
+    if not args.record and not args.audio and not args.stream:
+        print("Either --record, --audio, or --stream must be specified.")
         parser.print_help()
         return
 
     # Initialize Whisper
     app = SimpleWhisper(model_size=args.model, device=args.device)
 
-    # Record or use provided audio
+    # Record, stream, or use provided audio
     if args.record:
         # Show audio device information
         if args.input_device is None:
@@ -335,11 +418,59 @@ def main():
         if audio_path is None:
             print("Failed to record audio.")
             return
+
+    elif args.stream:
+        # Streaming mode
+        if not HAS_STREAM:
+            print("Error: Streaming module not available.")
+            print("Make sure stream_whisper.py is in the same directory.")
+            return
+
+        print("\n" + "="*50)
+        print("STREAMING MODE - Real-time Transcription")
+        print("="*50)
+
+        # Initialize StreamWhisper
+        streamer = StreamWhisper(
+            model_size=args.model,
+            device=args.device,
+            chunk_duration=args.chunk_duration,
+            overlap=args.overlap
+        )
+
+        # Start streaming
+        print(f"Starting streaming with {args.chunk_duration}s chunks, {args.overlap}s overlap")
+        if not streamer.start_streaming(device_id=args.input_device):
+            print("Failed to start streaming.")
+            return
+
+        try:
+            print("Streaming started. Press Ctrl+C to stop.\n")
+            start_time = time.time()
+
+            while True:
+                # Get transcription
+                text = streamer.get_transcription(timeout=0.5)
+                if text and text.strip():
+                    print(f"[{time.time() - start_time:.1f}s] {text}")
+
+                time.sleep(0.1)
+
+        except KeyboardInterrupt:
+            print("\n\nStreaming stopped by user.")
+        finally:
+            streamer.stop_streaming()
+            print("\nFull transcription:")
+            print(streamer.get_full_transcription())
+
+        # Exit after streaming (don't continue to transcription step)
+        return
+
     else:
         audio_path = args.audio
 
     # Transcribe audio
-    result = app.transcribe_audio(audio_path, language=args.language)
+    result = app.transcribe_audio(audio_path, language=args.language, simplified_chinese=args.simplified_chinese)
     if result is None:
         print("Failed to transcribe audio.")
         return

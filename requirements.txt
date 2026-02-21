@@ -10,3 +10,6 @@ soundfile
 # Numerical computation (usually installed as dependencies)
 numpy
 scipy
+
+# Chinese text conversion (optional)
+zhconv

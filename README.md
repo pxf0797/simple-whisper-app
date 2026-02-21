@@ -4,14 +4,17 @@ A minimal Python application for real-time audio recording and transcription usi
 
 ## Features
 
-- Real-time audio recording from microphone with device selection
-- Automatic transcription using Whisper
-- Support for multiple Whisper model sizes (tiny, base, small, medium, large)
-- Automatic language detection
-- Save recordings and transcriptions to files
-- Simple command-line interface
-- Audio input device selection (list and choose specific microphone)
-- Computation device selection (CPU, CUDA for GPU, MPS for Apple Silicon)
+- **Real-time audio recording** from microphone with device selection
+- **Streaming transcription** - process audio in real-time as you speak
+- **Automatic transcription** using Whisper
+- **Support for multiple Whisper model sizes** (tiny, base, small, medium, large)
+- **Automatic language detection**
+- **Save recordings and transcriptions** to files
+- **Simple command-line interface** with streaming support
+- **Interactive mode** with streaming option
+- **GUI interface** with always-on-top window and transparency control
+- **Audio input device selection** (list and choose specific microphone)
+- **Computation device selection** (CPU, CUDA for GPU, MPS for Apple Silicon)
 
 ## Requirements
 
@@ -96,6 +99,43 @@ python simple_whisper.py --record --duration 10 --model small --device cuda --in
 python simple_whisper.py --help
 ```
 
+### Streaming Mode (Real-time Transcription)
+
+The application now supports **real-time streaming transcription** with low latency (3-5 seconds).
+
+#### Command-line streaming:
+```bash
+# Basic streaming with tiny model
+python simple_whisper.py --stream --model tiny
+
+# Custom chunk parameters for better latency/accuracy balance
+python simple_whisper.py --stream --model base --chunk-duration 2.0 --overlap 0.5
+
+# Specify audio input device
+python simple_whisper.py --stream --model tiny --input-device 1
+```
+
+#### Interactive streaming mode:
+```bash
+python interactive_whisper.py
+# Select "STREAM" mode (option 2) and follow the prompts
+```
+
+#### Standalone GUI application:
+```bash
+python stream_gui.py --model tiny
+```
+Features:
+- Always-on-top window
+- Transparency control (30%-100%)
+- Start/Stop/Pause buttons
+- Real-time text display with auto-scroll
+- Word count statistics
+
+#### Streaming parameters:
+- `--chunk-duration`: Audio chunk duration in seconds (default: 3.0)
+- `--overlap`: Overlap between consecutive chunks in seconds (default: 1.0)
+
 ## Examples
 
 1. **Quick test with tiny model:**
@@ -123,6 +163,21 @@ python simple_whisper.py --help
 
    # Transcribe existing file with CPU only
    python simple_whisper.py --audio meeting.wav --model base --device cpu
+   ```
+
+5. **Real-time streaming transcription:**
+   ```bash
+   # Low-latency streaming with tiny model
+   python simple_whisper.py --stream --model tiny --chunk-duration 1.0
+
+   # High-quality streaming with base model
+   python simple_whisper.py --stream --model base --chunk-duration 3.0 --overlap 1.0
+
+   # Interactive streaming mode
+   python interactive_whisper.py
+
+   # GUI streaming application
+   python stream_gui.py --model tiny
    ```
 
 ## Output Files

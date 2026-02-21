@@ -7,12 +7,21 @@ A user-friendly interactive interface for the Simple Whisper application.
 import sys
 import os
 import subprocess
+import time
 import sounddevice as sd
 
 # Add current directory to path to import simple_whisper
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from simple_whisper import SimpleWhisper, list_audio_devices
+
+# Try to import StreamWhisper
+try:
+    from stream_whisper import StreamWhisper
+    HAS_STREAM = True
+except ImportError:
+    HAS_STREAM = False
+    StreamWhisper = None
 
 
 def clear_screen():
@@ -190,7 +199,8 @@ def select_recording_mode():
 
     modes = [
         ("record", "Record from microphone"),
-        ("file", "Transcribe existing audio file")
+        ("file", "Transcribe existing audio file"),
+        ("stream", "Stream in real-time")
     ]
 
     print("Available modes:\n")
@@ -262,6 +272,10 @@ def run_transcription(params):
             print(f"  Duration: {params['duration']} seconds")
         else:
             print(f"  Duration: Manual stop (Ctrl+C)")
+    elif params['mode'] == 'stream':
+        print(f"  Audio device: {params.get('device_id', 'default')}")
+        print(f"  Chunk duration: {params.get('chunk_duration', 3.0)} seconds")
+        print(f"  Overlap: {params.get('overlap', 1.0)} seconds")
     else:
         print(f"  Audio file: {params['audio_file']}")
 
@@ -290,15 +304,64 @@ def run_transcription(params):
             if audio_path is None:
                 print("Failed to record audio.")
                 return
+
+            # Transcribe audio
+            result = app.transcribe_audio(audio_path, language=params.get('language'))
+            if result is None:
+                print("Failed to transcribe audio.")
+                return
+
+        elif params['mode'] == 'stream':
+            # Streaming mode
+            if not HAS_STREAM:
+                print("Error: Streaming module not available.")
+                print("Make sure stream_whisper.py is in the same directory.")
+                return
+
+            # Initialize StreamWhisper
+            streamer = StreamWhisper(
+                model_size=params['model'],
+                chunk_duration=params.get('chunk_duration', 3.0),
+                overlap=params.get('overlap', 1.0)
+            )
+
+            # Start streaming
+            print(f"\nStarting streaming...")
+            if not streamer.start_streaming(device_id=params.get('device_id')):
+                print("Failed to start streaming.")
+                return
+
+            try:
+                print("Streaming started. Press Ctrl+C to stop.\n")
+                start_time = time.time()
+
+                while True:
+                    # Get transcription
+                    text = streamer.get_transcription(timeout=0.5)
+                    if text and text.strip():
+                        print(f"[{time.time() - start_time:.1f}s] {text}")
+
+                    time.sleep(0.1)
+
+            except KeyboardInterrupt:
+                print("\n\nStreaming stopped by user.")
+            finally:
+                streamer.stop_streaming()
+                print("\nFull transcription:")
+                print(streamer.get_full_transcription())
+
+            # Exit after streaming
+            return
+
         else:
             # Use existing audio file
             audio_path = params['audio_file']
 
-        # Transcribe audio
-        result = app.transcribe_audio(audio_path, language=params.get('language'))
-        if result is None:
-            print("Failed to transcribe audio.")
-            return
+            # Transcribe audio
+            result = app.transcribe_audio(audio_path, language=params.get('language'))
+            if result is None:
+                print("Failed to transcribe audio.")
+                return
 
         # Add audio path to result for saving
         result["audio_path"] = audio_path
@@ -356,6 +419,41 @@ def main():
             custom_text = input("Custom transcription filename (Enter for auto-generated): ").strip()
             if custom_text:
                 params['output_text'] = custom_text
+
+        elif mode == 'stream':
+            params['device_id'] = select_audio_device()
+
+            # Get chunk duration
+            while True:
+                try:
+                    chunk_input = input("Chunk duration in seconds (default: 3.0): ").strip()
+                    if not chunk_input:
+                        params['chunk_duration'] = 3.0
+                        break
+                    chunk_duration = float(chunk_input)
+                    if chunk_duration <= 0:
+                        print("Chunk duration must be positive.")
+                        continue
+                    params['chunk_duration'] = chunk_duration
+                    break
+                except ValueError:
+                    print("Please enter a valid number.")
+
+            # Get overlap
+            while True:
+                try:
+                    overlap_input = input("Overlap between chunks in seconds (default: 1.0): ").strip()
+                    if not overlap_input:
+                        params['overlap'] = 1.0
+                        break
+                    overlap = float(overlap_input)
+                    if overlap < 0:
+                        print("Overlap cannot be negative.")
+                        continue
+                    params['overlap'] = overlap
+                    break
+                except ValueError:
+                    print("Please enter a valid number.")
 
         else:  # mode == 'file'
             params['audio_file'] = get_audio_file_path()

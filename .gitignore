@@ -84,3 +84,5 @@ record/
 # Test files
 test_*
 system_test_*
+# Except important test scripts
+!test_stream.py
