@@ -5,6 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -130,7 +131,7 @@ echo ""
 read -p "Press Enter to start transcription... (Ctrl+C to cancel)"
 
 # Build command
-CMD="python src/core/simple_whisper.py --audio \"$AUDIO_FILE\" --model $MODEL --output-text \"$OUTPUT_TEXT\""
+CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --audio \"$AUDIO_FILE\" --model $MODEL --output-text \"$OUTPUT_TEXT\""
 if [ -n "$LANGUAGE" ]; then
     CMD="$CMD --language $LANGUAGE"
 fi
@@ -155,4 +156,4 @@ echo "To record new audio:"
 echo "  ./quick_record.sh"
 echo ""
 echo "To use interactive mode:"
-echo "  python src/core/interactive_whisper.py"
+echo "  python $PROJECT_ROOT/src/core/interactive_whisper.py"

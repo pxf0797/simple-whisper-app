@@ -5,6 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -150,7 +151,7 @@ echo ""
 read -p "Press Enter to start meeting recording... (Ctrl+C to cancel)"
 
 # Build command
-CMD="python src/core/simple_whisper.py --record --duration $DURATION --model $MODEL"
+CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record --duration $DURATION --model $MODEL"
 CMD="$CMD --output-audio \"$AUDIO_FILE\" --output-text \"$TRANSCRIPT_FILE\""
 if [ -n "$LANGUAGE" ]; then
     CMD="$CMD --language $LANGUAGE"
@@ -184,5 +185,5 @@ echo ""
 echo -e "${CYAN}Additional commands:${NC}"
 echo "  Transcribe another file: ./transcribe_file.sh <audiofile>"
 echo "  Quick recording: ./quick_record.sh"
-echo "  Interactive mode: python src/core/interactive_whisper.py"
+echo "  Interactive mode: python $PROJECT_ROOT/src/core/interactive_whisper.py"
 echo ""

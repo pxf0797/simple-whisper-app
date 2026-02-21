@@ -6,6 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -189,7 +190,7 @@ recording_mode() {
         echo -e "${YELLOW}Falling back to direct simple_whisper.py execution${NC}"
 
         # Build command manually
-        CMD="python src/core/simple_whisper.py --record"
+        CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record"
 
         # Ask for parameters
         read -p "Recording duration (seconds, empty for manual): " DURATION
@@ -225,7 +226,7 @@ streaming_mode() {
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             # Use simple_whisper.py with --stream flag
-            CMD="python src/core/simple_whisper.py --stream"
+            CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --stream"
 
             read -p "Model (tiny/base/small, default: tiny): " MODEL
             MODEL=${MODEL:-tiny}
@@ -272,7 +273,7 @@ streaming_mode() {
     case $STREAM_OPT in
         1)
             echo -e "${GREEN}Running quick streaming test...${NC}"
-            python src/streaming/stream_whisper.py --model tiny --duration 30 --chunk-duration 2.0
+            python $PROJECT_ROOT/src/streaming/stream_whisper.py --model tiny --duration 30 --chunk-duration 2.0
             ;;
         2)
             # Custom configuration
@@ -290,7 +291,7 @@ streaming_mode() {
 
             read -p "Audio device ID (empty for default): " AUDIO_DEVICE
 
-            CMD="python src/streaming/stream_whisper.py --model $MODEL --duration $TEST_DUR --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+            CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $TEST_DUR --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
             if [ -n "$AUDIO_DEVICE" ]; then
                 CMD="$CMD --input-device $AUDIO_DEVICE"
             fi
@@ -304,7 +305,7 @@ streaming_mode() {
                 read -p "Model (tiny/base/small, default: tiny): " MODEL
                 MODEL=${MODEL:-tiny}
 
-                CMD="python src/streaming/stream_gui.py --model $MODEL"
+                CMD="python $PROJECT_ROOT/src/streaming/stream_gui.py --model $MODEL"
                 read -p "Additional parameters (press Enter for none): " EXTRA_PARAMS
 
                 if [ -n "$EXTRA_PARAMS" ]; then
@@ -345,7 +346,7 @@ gui_mode() {
     case $GUI_OPT in
         1)
             echo -e "${GREEN}Starting basic GUI...${NC}"
-            python src/streaming/stream_gui.py --model tiny
+            python $PROJECT_ROOT/src/streaming/stream_gui.py --model tiny
             ;;
         2)
             read -p "Model (tiny/base/small, default: tiny): " MODEL
@@ -357,7 +358,7 @@ gui_mode() {
             read -p "Overlap (seconds, default: 1.0): " OVERLAP
             OVERLAP=${OVERLAP:-1.0}
 
-            CMD="python src/streaming/stream_gui.py --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+            CMD="python $PROJECT_ROOT/src/streaming/stream_gui.py --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
 
             read -p "Audio device ID (empty for default): " AUDIO_DEVICE
             if [ -n "$AUDIO_DEVICE" ]; then
@@ -375,7 +376,7 @@ gui_mode() {
             echo "  --chunk-duration SECS  : Chunk duration in seconds"
             echo "  --overlap SECS         : Overlap between chunks"
 
-            CMD="python src/streaming/stream_gui.py"
+            CMD="python $PROJECT_ROOT/src/streaming/stream_gui.py"
 
             while true; do
                 read -p "Enter parameter (or 'done' to finish): " PARAM
@@ -437,7 +438,7 @@ for audio_file in "$INPUT_DIR"/*.wav "$INPUT_DIR"/*.mp3 "$INPUT_DIR"/*.m4a 2>/de
 
         echo "Processing [$count]: $base_name"
 
-        CMD="python src/core/simple_whisper.py --audio \"$audio_file\" --model $MODEL --output-text \"$output_file\""
+        CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --audio \"$audio_file\" --model $MODEL --output-text \"$output_file\""
         if [ -n "$LANGUAGE" ]; then
             CMD="$CMD --language $LANGUAGE"
         fi
@@ -493,7 +494,7 @@ EOF
             read -p "Language code (empty for auto): " LANGUAGE
 
             if [ -f "batch_transcribe.py" ]; then
-                CMD="python src/core/batch_transcribe.py"
+                CMD="python $PROJECT_ROOT/src/core/batch_transcribe.py"
                 [ -n "$INPUT_DIR" ] && CMD="$CMD --input-dir \"$INPUT_DIR\""
                 [ -n "$OUTPUT_DIR" ] && CMD="$CMD --output-dir \"$OUTPUT_DIR\""
                 [ -n "$MODEL" ] && CMD="$CMD --model $MODEL"
@@ -531,7 +532,7 @@ interactive_mode() {
     fi
 
     echo "Interactive Whisper Application starting..."
-    python src/core/interactive_whisper.py
+    python $PROJECT_ROOT/src/core/interactive_whisper.py
 }
 
 # Function for test mode
@@ -553,7 +554,7 @@ test_mode() {
         1)
             echo -e "${GREEN}Running quick test...${NC}"
             if [ -f "test_stream.py" ]; then
-                python src/streaming/test_stream.py
+                python $PROJECT_ROOT/src/streaming/test_stream.py
             else
                 python -c "import whisper; print('✓ Whisper imported successfully')"
                 python -c "import sounddevice; print('✓ Sounddevice imported successfully')"
@@ -562,7 +563,7 @@ test_mode() {
             ;;
         2)
             if [ -f "test_stream.py" ]; then
-                python src/streaming/test_stream.py
+                python $PROJECT_ROOT/src/streaming/test_stream.py
             else
                 echo -e "${YELLOW}test_stream.py not found${NC}"
                 echo "Running component tests..."
@@ -582,7 +583,7 @@ test_mode() {
             ;;
         3)
             echo -e "${GREEN}Testing audio devices...${NC}"
-            python src/core/simple_whisper.py --list-audio-devices
+            python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
             ;;
         4)
             echo -e "${GREEN}Testing model loading...${NC}"
@@ -607,7 +608,7 @@ print(f'  Model size: \"$TEST_MODEL\"')
         5)
             echo -e "${GREEN}Testing streaming functionality...${NC}"
             if [ -f "stream_whisper.py" ]; then
-                python src/streaming/stream_whisper.py --model tiny --duration 5 --chunk-duration 1.0
+                python $PROJECT_ROOT/src/streaming/stream_whisper.py --model tiny --duration 5 --chunk-duration 1.0
             else
                 echo -e "${YELLOW}Streaming module not available${NC}"
             fi
@@ -675,7 +676,7 @@ for model_size in ['tiny', 'base', 'small', 'medium', 'large']:
             ;;
         5)
             echo -e "${GREEN}Configuring audio devices...${NC}"
-            python src/core/simple_whisper.py --list-audio-devices
+            python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
             echo ""
             echo "Audio configuration notes:"
             echo "• On macOS: System Preferences > Sound > Input"
@@ -707,7 +708,7 @@ quick_tools_mode() {
     case $TOOL_OPT in
         1)
             echo -e "${GREEN}Listing audio devices...${NC}"
-            python src/core/simple_whisper.py --list-audio-devices
+            python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
             ;;
         2)
             echo -e "${GREEN}Available Whisper models:${NC}"
