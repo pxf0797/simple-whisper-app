@@ -79,6 +79,7 @@ config.json
 output/
 transcriptions/
 test_transcriptions/
+record/
 
 # Test files
 test_*

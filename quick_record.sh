@@ -33,6 +33,8 @@ MODEL="base"
 DURATION=""
 OUTPUT_AUDIO=""
 OUTPUT_TEXT=""
+DEVICE=""
+INPUT_DEVICE=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -45,9 +47,17 @@ while [[ $# -gt 0 ]]; do
             MODEL="$2"
             shift 2
             ;;
+        --device)
+            DEVICE="$2"
+            shift 2
+            ;;
+        --input-device)
+            INPUT_DEVICE="$2"
+            shift 2
+            ;;
         -o|--output)
-            OUTPUT_AUDIO="$2"
-            OUTPUT_TEXT="${2%.*}_transcription.txt"
+            OUTPUT_AUDIO="record/$2"
+            OUTPUT_TEXT="record/${2%.*}_transcription.txt"
             shift 2
             ;;
         -h|--help)
@@ -58,6 +68,8 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -d, --duration SECONDS   Recording duration in seconds"
             echo "  -m, --model MODEL        Model size: tiny, base, small, medium, large (default: base)"
+            echo "      --device DEVICE      Computation device: cpu, mps, cuda (default: auto)"
+            echo "      --input-device ID    Audio input device ID (use --list-devices to see IDs)"
             echo "  -o, --output FILENAME    Base filename for output (audio and transcription)"
             echo "  -h, --help               Show this help message"
             echo ""
@@ -65,6 +77,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 -d 10                 Record for 10 seconds with base model"
             echo "  $0 -d 60 -m small        Record for 60 seconds with small model"
             echo "  $0 -d 300 -o meeting     Record 5 minutes, save as meeting.wav and meeting_transcription.txt"
+            echo "  $0 -d 60 -m small --device mps --input-device 5  Record with GPU and specific microphone"
             echo ""
             exit 0
             ;;
@@ -92,12 +105,16 @@ fi
 # If output not specified, generate based on timestamp
 if [ -z "$OUTPUT_AUDIO" ]; then
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-    OUTPUT_AUDIO="recording_${TIMESTAMP}.wav"
-    OUTPUT_TEXT="recording_${TIMESTAMP}_transcription.txt"
+    OUTPUT_AUDIO="record/recording_${TIMESTAMP}.wav"
+    OUTPUT_TEXT="record/recording_${TIMESTAMP}_transcription.txt"
 fi
+
+mkdir -p record
 
 echo -e "\n${BLUE}Configuration:${NC}"
 echo "  Model: $MODEL"
+echo "  Audio device: ${INPUT_DEVICE:-default}"
+echo "  Computation device: ${DEVICE:-auto}"
 if [ -n "$DURATION" ]; then
     echo "  Duration: $DURATION seconds"
 else
@@ -107,21 +124,68 @@ echo "  Audio output: $OUTPUT_AUDIO"
 echo "  Text output: $OUTPUT_TEXT"
 echo ""
 
-# List audio devices
-echo -e "${BLUE}Audio Device Information:${NC}"
-python -c "
+# Audio device selection
+if [ -z "$INPUT_DEVICE" ]; then
+    echo -e "${BLUE}Audio Device Selection:${NC}"
+    echo "Listing available audio input devices..."
+    python simple_whisper.py --list-audio-devices
+
+    # Get default device ID
+    DEFAULT_DEVICE=$(python -c "
 import sounddevice as sd
-devices = sd.query_devices()
-default = sd.default.device[0]
-print(f'Using default input device: [{default}] {devices[default][\"name\"]}')
-print('Use python simple_whisper.py --list-audio-devices to see all devices')
-"
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+
+    if [ -n "$DEFAULT_DEVICE" ]; then
+        echo -e "\nDefault device ID: $DEFAULT_DEVICE"
+        read -p "Enter device ID (press Enter for default $DEFAULT_DEVICE): " DEVICE_INPUT
+        if [ -n "$DEVICE_INPUT" ]; then
+            INPUT_DEVICE="$DEVICE_INPUT"
+        else
+            INPUT_DEVICE="$DEFAULT_DEVICE"
+        fi
+    else
+        read -p "Enter device ID: " INPUT_DEVICE
+    fi
+fi
+
+# Computation device selection
+if [ -z "$DEVICE" ]; then
+    echo -e "\n${BLUE}Computation Device Selection:${NC}"
+    echo "  cpu  - Use CPU (default)"
+    echo "  mps  - Use Apple Silicon GPU (M1/M2/M3)"
+    echo "  cuda - Use NVIDIA GPU (CUDA)"
+    read -p "Select device [cpu/mps/cuda] (press Enter for cpu): " DEVICE_INPUT
+    if [ -n "$DEVICE_INPUT" ]; then
+        DEVICE="$DEVICE_INPUT"
+    else
+        DEVICE="cpu"
+    fi
+fi
 
 echo ""
-read -p "Press Enter to start recording... (Ctrl+C to cancel)"
+if [ -n "$INPUT_DEVICE" ] && [ -n "$DEVICE" ]; then
+    echo "All parameters set. Starting recording automatically..."
+else
+    read -p "Press Enter to start recording... (Ctrl+C to cancel)"
+fi
 
 # Build command
+# Build command
 CMD="python simple_whisper.py --record --model $MODEL --output-audio $OUTPUT_AUDIO --output-text $OUTPUT_TEXT"
+
+if [ -n "$INPUT_DEVICE" ]; then
+    CMD="$CMD --input-device $INPUT_DEVICE"
+fi
+
+if [ -n "$DEVICE" ]; then
+    CMD="$CMD --device $DEVICE"
+fi
+
 if [ -n "$DURATION" ]; then
     CMD="$CMD --duration $DURATION"
 fi
