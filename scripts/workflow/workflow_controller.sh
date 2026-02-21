@@ -128,10 +128,15 @@ select_workflow() {
 # Function to select audio device interactively
 select_audio_device_interactive() {
     local default_device=""
+    local device_list=""
 
-    echo -e "${BLUE}Audio Device Selection:${NC}"
-    echo "Listing available audio input devices..."
-    python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
+    # Output menu to stderr, result to stdout
+    echo -e "${BLUE}Audio Device Selection:${NC}" >&2
+    echo "Listing available audio input devices..." >&2
+
+    # Capture device list and display to stderr
+    device_list=$(python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices 2>&1)
+    echo "$device_list" >&2
 
     # Get default device ID
     default_device=$(python -c "
@@ -144,15 +149,15 @@ except:
 ")
 
     if [ -n "$default_device" ]; then
-        echo -e "\nDefault device ID: $default_device"
-        read -p "Enter device ID (press Enter for default $default_device): " device_input
+        echo -e "\nDefault device ID: $default_device" >&2
+        read -p "Enter device ID (press Enter for default $default_device): " device_input >&2
         if [ -n "$device_input" ]; then
             echo "$device_input"
         else
             echo "$default_device"
         fi
     else
-        read -p "Enter device ID: " device_input
+        read -p "Enter device ID: " device_input >&2
         echo "$device_input"
     fi
 }
@@ -161,22 +166,174 @@ except:
 select_model_interactive() {
     local default_choice=${1:-2}
 
-    echo -e "${BLUE}Model Selection:${NC}"
-    echo "  1) tiny    - Fastest, lowest accuracy"
-    echo "  2) base    - Good balance"
-    echo "  3) small   - Better accuracy"
-    echo "  4) medium  - High accuracy"
-    echo "  5) large   - Highest accuracy"
+    # Output menu to stderr, result to stdout
+    echo -e "${BLUE}Model Selection:${NC}" >&2
+    echo "  1) tiny    - Fastest, lowest accuracy" >&2
+    echo "  2) base    - Good balance" >&2
+    echo "  3) small   - Better accuracy" >&2
+    echo "  4) medium  - High accuracy" >&2
+    echo "  5) large   - Highest accuracy" >&2
 
     while true; do
-        read -p "Select model (1-5, default: $default_choice): " model_choice
+        read -p "Select model (1-5, default: $default_choice): " model_choice >&2
         case $model_choice in
             1) echo "tiny"; break ;;
             2|"") echo "base"; break ;;
             3) echo "small"; break ;;
             4) echo "medium"; break ;;
             5) echo "large"; break ;;
-            *) echo "Please enter a number 1-5" ;;
+            *) echo "Please enter a number 1-5" >&2 ;;
+        esac
+    done
+}
+
+# Function to select language interactively (returns language code via stdout)
+select_language_interactive() {
+    # Output menu to stderr, result to stdout
+    echo -e "${BLUE}Language Selection Mode:${NC}" >&2
+    echo "  1) auto           - Automatic language detection (recommended)" >&2
+    echo "  2) single         - Specify a single language" >&2
+    echo "  3) multiple       - Specify multiple languages (e.g., Chinese + English)" >&2
+
+    read -p "Select mode (1-3, default: 1): " MODE_CHOICE >&2
+
+    case $MODE_CHOICE in
+        1|"")
+            # Auto detection - return empty string for language
+            echo ""
+            ;;
+        2)
+            # Single language selection
+            echo -e "\n${BLUE}Single Language Selection:${NC}" >&2
+            echo "  1) en  - English" >&2
+            echo "  2) zh  - Chinese" >&2
+            echo "  3) ja  - Japanese" >&2
+            echo "  4) ko  - Korean" >&2
+            echo "  5) fr  - French" >&2
+            echo "  6) de  - German" >&2
+            echo "  7) other - Enter custom language code" >&2
+
+            read -p "Select language (1-7): " LANG_CHOICE >&2
+            local SELECTED_LANG=""
+            case $LANG_CHOICE in
+                1) SELECTED_LANG="en" ;;
+                2) SELECTED_LANG="zh" ;;
+                3) SELECTED_LANG="ja" ;;
+                4) SELECTED_LANG="ko" ;;
+                5) SELECTED_LANG="fr" ;;
+                6) SELECTED_LANG="de" ;;
+                7) read -p "Enter language code (e.g., 'es', 'ru', 'pt'): " SELECTED_LANG >&2 ;;
+                *) SELECTED_LANG="en" ;;  # Default to English
+            esac
+
+            # For Chinese, ask about simplified Chinese
+            local SIMPLIFIED=""
+            if [ "$SELECTED_LANG" = "zh" ]; then
+                read -p "Convert to Simplified Chinese? (y/n, default: y): " SIMPLIFY_INPUT >&2
+                if [[ "$SIMPLIFY_INPUT" =~ ^[Nn]$ ]]; then
+                    echo "zh:no"
+                else
+                    echo "zh:yes"
+                fi
+            else
+                echo "$SELECTED_LANG"
+            fi
+            ;;
+        3)
+            # Multiple languages selection
+            echo -e "\n${BLUE}Multiple Languages Selection:${NC}" >&2
+            echo "You can add multiple languages. The system will use auto-detection" >&2
+            echo "but will be aware of these languages for better accuracy." >&2
+            echo "" >&2
+
+            local LANGUAGES_ARRAY=()
+            while true; do
+                echo "Current selected languages: ${LANGUAGES_ARRAY[*]}" >&2
+                echo "" >&2
+                echo "  1) Add English" >&2
+                echo "  2) Add Chinese" >&2
+                echo "  3) Add Japanese" >&2
+                echo "  4) Add Korean" >&2
+                echo "  5) Add French" >&2
+                echo "  6) Add German" >&2
+                echo "  7) Add custom language" >&2
+                echo "  8) Done adding languages" >&2
+
+                read -p "Select option (1-8): " MULTI_CHOICE >&2
+                case $MULTI_CHOICE in
+                    1) LANGUAGES_ARRAY+=("en") ;;
+                    2) LANGUAGES_ARRAY+=("zh") ;;
+                    3) LANGUAGES_ARRAY+=("ja") ;;
+                    4) LANGUAGES_ARRAY+=("ko") ;;
+                    5) LANGUAGES_ARRAY+=("fr") ;;
+                    6) LANGUAGES_ARRAY+=("de") ;;
+                    7) read -p "Enter language code: " CUSTOM_LANG >&2 && LANGUAGES_ARRAY+=("$CUSTOM_LANG") ;;
+                    8) break ;;
+                    *) echo "Please enter 1-8" >&2 ;;
+                esac
+
+                # If we have at least 2 languages, ask if user wants to add more
+                if [ ${#LANGUAGES_ARRAY[@]} -ge 2 ]; then
+                    read -p "Add more languages? (y/n, default: n): " ADD_MORE >&2
+                    if [[ ! "$ADD_MORE" =~ ^[Yy]$ ]]; then
+                        break
+                    fi
+                fi
+            done
+
+            # Format languages for passing to script
+            if [ ${#LANGUAGES_ARRAY[@]} -eq 0 ]; then
+                echo ""  # Auto detection if no languages selected
+            elif [ ${#LANGUAGES_ARRAY[@]} -eq 1 ]; then
+                local SINGLE_LANG="${LANGUAGES_ARRAY[0]}"
+                # For Chinese, ask about simplified Chinese
+                if [ "$SINGLE_LANG" = "zh" ]; then
+                    read -p "Convert to Simplified Chinese? (y/n, default: y): " SIMPLIFY_INPUT >&2
+                    if [[ "$SIMPLIFY_INPUT" =~ ^[Nn]$ ]]; then
+                        echo "zh:no"
+                    else
+                        echo "zh:yes"
+                    fi
+                else
+                    echo "$SINGLE_LANG"
+                fi
+            else
+                # Multiple languages - use auto detection but pass languages as hint
+                local MULTI_LANGS="multi:$(IFS=,; echo "${LANGUAGES_ARRAY[*]}")"
+                # Check if Chinese is in the list
+                if [[ " ${LANGUAGES_ARRAY[*]} " =~ " zh " ]]; then
+                    read -p "Convert Chinese to Simplified Chinese? (y/n, default: y): " SIMPLIFY_INPUT >&2
+                    if [[ "$SIMPLIFY_INPUT" =~ ^[Nn]$ ]]; then
+                        echo "$MULTI_LANGS:no"
+                    else
+                        echo "$MULTI_LANGS:yes"
+                    fi
+                else
+                    echo "$MULTI_LANGS"
+                fi
+            fi
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Function to select computation device interactively
+select_device_interactive() {
+    # Output menu to stderr, result to stdout
+    echo -e "${BLUE}Computation Device Selection:${NC}" >&2
+    echo "  1) cpu   - Use CPU" >&2
+    echo "  2) mps   - Use Apple Silicon GPU (M1/M2/M3)" >&2
+    echo "  3) cuda  - Use NVIDIA GPU (CUDA)" >&2
+
+    while true; do
+        read -p "Select device (1-3, default: 1): " DEVICE_CHOICE >&2
+        case $DEVICE_CHOICE in
+            1|"") echo "cpu"; break ;;
+            2) echo "mps"; break ;;
+            3) echo "cuda"; break ;;
+            *) echo "Please enter a number 1-3 or press Enter for default" >&2 ;;
         esac
     done
 }
@@ -203,27 +360,27 @@ execute_quick_record() {
     MODEL=$(select_model_interactive 2)
 
     # Language selection
-    echo -e "\n${BLUE}Language Selection:${NC}"
-    echo "  1) auto detect (recommended)"
-    echo "  2) English (en)"
-    echo "  3) Chinese (zh)"
-    echo "  4) Japanese (ja)"
-    echo "  5) Custom language code"
+    LANGUAGE_RESULT=$(select_language_interactive)
 
-    read -p "Select language (1-5, default: 1): " LANG_CHOICE
-
-    case $LANG_CHOICE in
-        1|"") LANGUAGE="" ;;
-        2) LANGUAGE="en" ;;
-        3) LANGUAGE="zh" ;;
-        4) LANGUAGE="ja" ;;
-        5) read -p "Enter language code: " LANGUAGE ;;
-        *) LANGUAGE="" ;;
-    esac
+    # Parse language result (may contain simplified chinese setting)
+    LANGUAGE=""
+    SIMPLIFIED_CHINESE=""
+    if [ -n "$LANGUAGE_RESULT" ]; then
+        if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+            # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+            LANGUAGE="${LANGUAGE_RESULT%:*}"
+            SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+        else
+            LANGUAGE="$LANGUAGE_RESULT"
+        fi
+    fi
 
     # Audio device selection
     echo -e "\n${BLUE}Audio Device Selection:${NC}"
     INPUT_DEVICE=$(select_audio_device_interactive)
+
+    # Computation device selection
+    DEVICE=$(select_device_interactive)
 
     # Duration selection
     echo -e "\n${BLUE}Recording Duration:${NC}"
@@ -246,6 +403,10 @@ execute_quick_record() {
         CMD="$CMD --language $LANGUAGE"
     fi
 
+    if [ -n "$SIMPLIFIED_CHINESE" ]; then
+        CMD="$CMD --simplified-chinese $SIMPLIFIED_CHINESE"
+    fi
+
     if [ -n "$DURATION" ]; then
         CMD="$CMD --duration $DURATION"
     fi
@@ -254,10 +415,37 @@ execute_quick_record() {
         CMD="$CMD --input-device $INPUT_DEVICE"
     fi
 
+    if [ -n "$DEVICE" ]; then
+        CMD="$CMD --device $DEVICE"
+    fi
+
     echo -e "\n${GREEN}Configuration:${NC}"
     echo "  Model: $MODEL"
-    echo "  Language: ${LANGUAGE:-auto detect}"
+
+    # Format language display
+    if [ -z "$LANGUAGE" ]; then
+        echo "  Language: auto detect"
+    elif [[ "$LANGUAGE" == multi:* ]]; then
+        # Extract languages after "multi:" prefix
+        LANGS=${LANGUAGE#multi:}
+        echo "  Languages: Multiple (${LANGS})"
+    else
+        echo "  Language: $LANGUAGE"
+    fi
+
+    # Show simplified Chinese setting if applicable
+    if [ -n "$SIMPLIFIED_CHINESE" ]; then
+        if [[ "$LANGUAGE" == *zh* ]] || [[ "$LANGUAGE" == multi:* ]] && [[ "$LANGUAGE" == *zh* ]]; then
+            if [ "$SIMPLIFIED_CHINESE" = "yes" ]; then
+                echo "  Simplified Chinese: yes"
+            else
+                echo "  Simplified Chinese: no"
+            fi
+        fi
+    fi
+
     echo "  Audio device: ${INPUT_DEVICE:-default}"
+    echo "  Computation device: ${DEVICE:-auto}"
     echo "  Duration: ${DURATION:-manual stop}"
     echo "  Audio output: $AUDIO_FILE"
     echo "  Text output: $TEXT_FILE"
