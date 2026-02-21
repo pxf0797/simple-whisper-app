@@ -503,6 +503,22 @@ execute_live_streaming() {
     # Model selection
     MODEL=$(select_model_interactive 1)
 
+    # Language selection
+    LANGUAGE_RESULT=$(select_language_interactive)
+
+    # Parse language result (may contain simplified chinese setting)
+    LANGUAGE=""
+    SIMPLIFIED_CHINESE=""
+    if [ -n "$LANGUAGE_RESULT" ]; then
+        if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+            # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+            LANGUAGE="${LANGUAGE_RESULT%:*}"
+            SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+        else
+            LANGUAGE="$LANGUAGE_RESULT"
+        fi
+    fi
+
     # Audio device selection
     INPUT_DEVICE=$(select_audio_device_interactive)
 
@@ -521,6 +537,15 @@ execute_live_streaming() {
         CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
     fi
 
+    # Add language parameters if specified
+    if [ -n "$LANGUAGE" ]; then
+        CMD="$CMD --language $LANGUAGE"
+    fi
+
+    if [ -n "$SIMPLIFIED_CHINESE" ]; then
+        CMD="$CMD --simplified-chinese $SIMPLIFIED_CHINESE"
+    fi
+
     # Add input device if specified
     if [ -n "$INPUT_DEVICE" ]; then
         CMD="$CMD --input-device $INPUT_DEVICE"
@@ -528,6 +553,29 @@ execute_live_streaming() {
 
     echo -e "\n${GREEN}Streaming configuration:${NC}"
     echo "  Model: $MODEL"
+
+    # Format language display
+    if [ -z "$LANGUAGE" ]; then
+        echo "  Language: auto detect"
+    elif [[ "$LANGUAGE" == multi:* ]]; then
+        # Extract languages after "multi:" prefix
+        LANGS=${LANGUAGE#multi:}
+        echo "  Languages: Multiple (${LANGS})"
+    else
+        echo "  Language: $LANGUAGE"
+    fi
+
+    # Show simplified Chinese setting if applicable
+    if [ -n "$SIMPLIFIED_CHINESE" ]; then
+        if [[ "$LANGUAGE" == *zh* ]] || [[ "$LANGUAGE" == multi:* ]] && [[ "$LANGUAGE" == *zh* ]]; then
+            if [ "$SIMPLIFIED_CHINESE" = "yes" ]; then
+                echo "  Simplified Chinese: yes"
+            else
+                echo "  Simplified Chinese: no"
+            fi
+        fi
+    fi
+
     echo "  Audio device: ${INPUT_DEVICE:-default}"
     echo "  Duration: $DURATION seconds"
     echo "  Chunk duration: $CHUNK_DUR seconds"
