@@ -6,6 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -196,7 +197,7 @@ execute_quick_record() {
     mkdir -p record
 
     # Build command
-    CMD="python src/core/simple_whisper.py --record --model $MODEL --output-audio $AUDIO_FILE --output-text $TEXT_FILE"
+    CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record --model $MODEL --output-audio $AUDIO_FILE --output-text $TEXT_FILE"
 
     if [ -n "$LANGUAGE" ]; then
         CMD="$CMD --language $LANGUAGE"
@@ -276,9 +277,9 @@ execute_live_streaming() {
     OVERLAP=${OVERLAP:-1.0}
 
     if [ "$USE_SIMPLE_STREAM" = true ]; then
-        CMD="python src/core/simple_whisper.py --stream --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+        CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --stream --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
     else
-        CMD="python src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+        CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
     fi
 
     echo -e "\n${GREEN}Streaming configuration:${NC}"
@@ -367,7 +368,7 @@ execute_batch_processing() {
 
             echo "Processing [$count]: $base_name"
 
-            CMD="python src/core/simple_whisper.py --audio \"$audio_file\" --model $MODEL --output-text \"$output_file\""
+            CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --audio \"$audio_file\" --model $MODEL --output-text \"$output_file\""
             if [ -n "$LANGUAGE" ]; then
                 CMD="$CMD --language $LANGUAGE"
             fi
@@ -400,7 +401,7 @@ execute_interactive_transcription() {
 
     if [ -f "interactive_whisper.py" ]; then
         echo -e "${GREEN}Starting interactive_whisper.py...${NC}"
-        python src/core/interactive_whisper.py
+        python $PROJECT_ROOT/src/core/interactive_whisper.py
     else
         echo -e "${YELLOW}interactive_whisper.py not found${NC}"
         echo "Falling back to quick_record.sh"
@@ -438,7 +439,7 @@ execute_system_diagnostics() {
 
     # Test 3: Audio devices
     echo -e "${BLUE}3. Audio Devices:${NC}"
-    python src/core/simple_whisper.py --list-audio-devices 2>/dev/null || echo "✗ Failed to list audio devices"
+    python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices 2>/dev/null || echo "✗ Failed to list audio devices"
     echo ""
 
     # Test 4: Model loading
@@ -487,7 +488,7 @@ execute_tools_utilities() {
     case $TOOL_CHOICE in
         1)
             echo -e "${GREEN}Audio Devices:${NC}"
-            python src/core/simple_whisper.py --list-audio-devices
+            python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
             ;;
         2)
             echo -e "${GREEN}Whisper Models:${NC}"

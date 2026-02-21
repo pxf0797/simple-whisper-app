@@ -321,7 +321,7 @@ echo ""
 if [ -z "$INPUT_DEVICE" ]; then
     echo -e "${BLUE}Audio Device Selection:${NC}"
     echo "Listing available audio input devices..."
-    python src/core/simple_whisper.py --list-audio-devices
+    python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
 
     # Get default device ID
     DEFAULT_DEVICE=$(python -c "
@@ -372,7 +372,7 @@ else
 fi
 
 # Build command
-CMD="python src/core/simple_whisper.py --record --model $MODEL --output-audio $OUTPUT_AUDIO --output-text $OUTPUT_TEXT"
+CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record --model $MODEL --output-audio $OUTPUT_AUDIO --output-text $OUTPUT_TEXT"
 
 if [ -n "$INPUT_DEVICE" ]; then
     CMD="$CMD --input-device $INPUT_DEVICE"
@@ -408,7 +408,7 @@ echo "  Audio: $OUTPUT_AUDIO"
 echo "  Transcription: $OUTPUT_TEXT"
 echo ""
 echo "To transcribe another file:"
-echo "  python src/core/simple_whisper.py --audio <filename>"
+echo "  python $PROJECT_ROOT/src/core/simple_whisper.py --audio <filename>"
 echo ""
 echo "To use interactive mode:"
-echo "  python src/core/interactive_whisper.py"
+echo "  python $PROJECT_ROOT/src/core/interactive_whisper.py"
