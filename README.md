@@ -1,215 +1,202 @@
 # Simple Whisper Application
 
-A minimal Python application for real-time audio recording and transcription using OpenAI's Whisper model.
+A comprehensive audio recording and transcription application based on OpenAI's Whisper model.
 
-## Features
+## 📋 Project Overview
 
-- **Real-time audio recording** from microphone with device selection
-- **Streaming transcription** - process audio in real-time as you speak
-- **Automatic transcription** using Whisper
-- **Support for multiple Whisper model sizes** (tiny, base, small, medium, large)
-- **Automatic language detection**
-- **Save recordings and transcriptions** to files
-- **Simple command-line interface** with streaming support
-- **Interactive mode** with streaming option
-- **GUI interface** with always-on-top window and transparency control
-- **Audio input device selection** (list and choose specific microphone)
-- **Computation device selection** (CPU, CUDA for GPU, MPS for Apple Silicon)
+Simple Whisper provides a complete speech-to-text solution with multiple interfaces and workflows:
 
-## Requirements
+- **Real-time audio recording and transcription**
+- **Streaming audio processing** with low latency (3-5 seconds)
+- **Batch file processing** for multiple audio files
+- **Interactive command-line interface**
+- **Graphical user interface** with always-on-top display
+- **Comprehensive workflow control** through shell scripts
 
-- Python 3.8+
-- PyTorch (CPU or GPU)
-- OpenAI Whisper
-- Audio libraries (sounddevice, soundfile)
+## 🚀 Quick Start
 
-## Setup
-
-### 1. Create and activate virtual environment
-
+### 1. Installation
 ```bash
-# Create virtual environment
-python -m venv venv
+# Clone the repository
+git clone https://github.com/pxf0797/simple-whisper-app.git
+cd simple-whisper-app
 
-# Activate on macOS/Linux
-source venv/bin/activate
-
-# Activate on Windows
-venv\Scripts\activate
+# Setup environment
+./setup.sh
 ```
 
-### 2. Install dependencies
-
+### 2. Basic Usage
 ```bash
-pip install -r requirements.txt
-```
-
-Note: On some systems, you may need to install additional system dependencies:
-
-- **macOS**: `brew install portaudio`
-- **Ubuntu/Debian**: `sudo apt-get install portaudio19-dev python3-pyaudio`
-- **Windows**: Should work with pip install
-
-## Usage
-
-### Basic recording and transcription
-
-```bash
-# Record audio (press Ctrl+C to stop) and transcribe
-python simple_whisper.py --record
-
-# Record for specific duration (e.g., 10 seconds) and transcribe
-python simple_whisper.py --record --duration 10
+# Quick recording and transcription
+./quick_record.sh
 
 # Transcribe an existing audio file
-python simple_whisper.py --audio path/to/audio.wav
-```
+./transcribe_file.sh audio_file.wav
 
-### Advanced options
-
-```bash
-# Use a larger model for better accuracy
-python simple_whisper.py --record --model medium
-
-# Specify language (e.g., English)
-python simple_whisper.py --record --language en
-
-# Specify output files
-python simple_whisper.py --record --output-audio my_recording.wav --output-text my_transcription.txt
-
-# Use GPU if available (CUDA)
-python simple_whisper.py --record --device cuda
-
-# Use Apple Silicon GPU (MPS)
-python simple_whisper.py --record --device mps
-
-# List available audio input devices
-python simple_whisper.py --list-audio-devices
-
-# Use specific audio input device (e.g., device ID 5)
-python simple_whisper.py --record --input-device 5
-
-# Combine multiple options
-python simple_whisper.py --record --duration 10 --model small --device cuda --input-device 0 --language en
-```
-
-### Help
-
-```bash
-python simple_whisper.py --help
-```
-
-### Streaming Mode (Real-time Transcription)
-
-The application now supports **real-time streaming transcription** with low latency (3-5 seconds).
-
-#### Command-line streaming:
-```bash
-# Basic streaming with tiny model
-python simple_whisper.py --stream --model tiny
-
-# Custom chunk parameters for better latency/accuracy balance
-python simple_whisper.py --stream --model base --chunk-duration 2.0 --overlap 0.5
-
-# Specify audio input device
-python simple_whisper.py --stream --model tiny --input-device 1
-```
-
-#### Interactive streaming mode:
-```bash
+# Start interactive mode
 python interactive_whisper.py
-# Select "STREAM" mode (option 2) and follow the prompts
+
+# Use workflow controller
+./workflow_controller.sh
 ```
 
-#### Standalone GUI application:
+## 📁 Project Structure
+
+The project is organized into the following directories:
+
+### Documentation
+- `docs/en/` - English documentation
+- `docs/zh/` - Chinese documentation
+- `docs/reference/` - Reference documentation
+
+### Scripts
+- `quick_record.sh` - Quick recording with interactive parameter selection
+- `record_meeting.sh` - Meeting recording optimized script
+- `transcribe_file.sh` - Transcribe existing audio files
+- `workflow_*.sh` - Three workflow control scripts (simple, advanced, comprehensive)
+- `setup.sh`, `run.sh`, `install_stream_deps.sh` - Environment setup scripts
+
+### Python Modules
+- `simple_whisper.py` - Core recording and transcription class
+- `interactive_whisper.py` - Interactive command-line interface
+- `batch_transcribe.py` - Batch file processing
+- `stream_whisper.py`, `transcription_engine.py` - Streaming processing
+- `stream_gui.py` - Graphical user interface
+- `test_stream.py` - Streaming functionality tests
+
+### Configuration
+- `config/` - Workflow and task configuration files
+- `requirements.txt` - Python dependencies
+- `config_example.json` - Example configuration
+
+## 📚 Documentation
+
+### English Documentation
+- **[Main Documentation](docs/en/README.md)** - Complete project overview
+- **[Streaming Features](docs/en/README_stream.md)** - Streaming processing guide
+- **[Workflow Control](docs/en/README_workflow.md)** - Workflow scripts usage
+- **[Advanced Workflow Manager](docs/en/README_workflow_manager.md)** - JSON-based workflow system
+
+### Chinese Documentation (中文文档)
+- **[使用指南](docs/zh/使用指南.md)** - Basic usage guide
+- **[快速入门指南](docs/zh/快速入门指南.md)** - Quick start tutorial
+- **[详细教学文档](docs/zh/详细教学文档.md)** - Detailed tutorial
+- **[详细教学文档 V2](docs/zh/详细教学文档_v2.md)** - Updated tutorial
+
+### Reference Documentation
+- **[Project Structure](docs/reference/PROJECT_STRUCTURE.md)** - Detailed file structure
+- **[File Organization](docs/reference/FILE_ORGANIZATION.md)** - File categorization and classification
+
+## 🎯 Key Features
+
+### Core Features
+- **Audio Recording**: Real-time recording from microphone with device selection
+- **Whisper Transcription**: Using OpenAI's Whisper models (tiny, base, small, medium, large)
+- **Multi-language Support**: Automatic language detection or specified language
+- **Device Selection**: Audio input device and computation device (CPU/MPS/CUDA) selection
+
+### Advanced Features
+- **Streaming Processing**: Real-time audio stream transcription with low latency
+- **Batch Processing**: Process multiple audio files in batch
+- **GUI Interface**: Always-on-top window with transparency control
+- **Intelligent Text Processing**: Sentence boundary detection, overlap handling
+
+### Workflow Management
+- **Quick Record**: Interactive parameter selection (`quick_record.sh`)
+- **Workflow Control**: Three levels of workflow control scripts
+- **System Diagnostics**: Environment testing and validation
+- **Configuration Management**: JSON-based workflow configuration
+
+## 🛠️ Usage Examples
+
+### Quick Recording
 ```bash
-python stream_gui.py --model tiny
+./quick_record.sh
+# Interactive selection of model, language, duration, and devices
 ```
-Features:
-- Always-on-top window
-- Transparency control (30%-100%)
-- Start/Stop/Pause buttons
-- Real-time text display with auto-scroll
-- Word count statistics
 
-#### Streaming parameters:
-- `--chunk-duration`: Audio chunk duration in seconds (default: 3.0)
-- `--overlap`: Overlap between consecutive chunks in seconds (default: 1.0)
-
-## Examples
-
-1. **Quick test with tiny model:**
-   ```bash
-   python simple_whisper.py --record --duration 5 --model tiny
-   ```
-
-2. **Transcribe existing file with English language:**
-   ```bash
-   python simple_whisper.py --audio recording.wav --language en --model base
-   ```
-
-3. **High-quality transcription:**
-   ```bash
-   python simple_whisper.py --record --model medium --output-text important_meeting.txt
-   ```
-
-4. **Advanced usage with device selection:**
-   ```bash
-   # List audio devices first
-   python simple_whisper.py --list-audio-devices
-
-   # Record using specific microphone and GPU
-   python simple_whisper.py --record --duration 15 --model small --device cuda --input-device 2
-
-   # Transcribe existing file with CPU only
-   python simple_whisper.py --audio meeting.wav --model base --device cpu
-   ```
-
-5. **Real-time streaming transcription:**
-   ```bash
-   # Low-latency streaming with tiny model
-   python simple_whisper.py --stream --model tiny --chunk-duration 1.0
-
-   # High-quality streaming with base model
-   python simple_whisper.py --stream --model base --chunk-duration 3.0 --overlap 1.0
-
-   # Interactive streaming mode
-   python interactive_whisper.py
-
-   # GUI streaming application
-   python stream_gui.py --model tiny
-   ```
-
-## Output Files
-
-- Audio recordings are saved as WAV files (e.g., `recording_20250221_143022.wav`)
-- Transcriptions are saved as text files (e.g., `recording_20250221_143022_transcription.txt`)
-
-## Troubleshooting
-
-### "PortAudio not found" error
-Install PortAudio library:
-- macOS: `brew install portaudio`
-- Ubuntu: `sudo apt-get install portaudio19-dev`
-- Windows: Should be included with sounddevice
-
-### "No module named 'sounddevice'"
-Make sure virtual environment is activated and dependencies are installed:
+### Meeting Recording
 ```bash
-source venv/bin/activate
-pip install sounddevice soundfile
+./record_meeting.sh
+# Optimized for long-duration meeting recording
 ```
 
-### Slow transcription
-- Use smaller model (tiny, base)
-- Use GPU if available (`--device cuda` or `--device mps`)
-- Limit recording duration
+### File Transcription
+```bash
+./transcribe_file.sh meeting_recording.wav
+# Transcribe existing audio file
+```
 
-### Poor transcription quality
-- Use larger model (small, medium, large)
-- Ensure clear audio input
-- Specify language with `--language` option
+### Streaming Transcription
+```bash
+# Using workflow controller
+./workflow_controller.sh --workflow 2
 
-## License
+# Direct streaming
+python stream_whisper.py --model tiny --duration 60
+```
 
-MIT
+### Batch Processing
+```bash
+python batch_transcribe.py --input-dir audio_files --output-dir transcriptions
+```
+
+## 🔧 Script Comparison
+
+| Script | Size | Purpose | Best For |
+|--------|------|---------|----------|
+| `quick_record.sh` | 13.7KB | Quick recording with interactive selection | Beginners, quick use |
+| `workflow_controller.sh` | 19.9KB | Simplified workflow control | Regular users |
+| `workflow_control.sh` | 28.9KB | 8-mode menu-driven system | Feature exploration |
+| `workflow_manager.sh` | 32.9KB | Advanced workflow with JSON config | Complex workflows, automation |
+
+## 📊 Model Performance
+
+| Model | Parameters | Speed | Accuracy | Recommended Use |
+|-------|------------|-------|----------|-----------------|
+| `tiny` | 39M | Fastest | Lowest | Real-time streaming, quick tests |
+| `base` | 74M | Fast | Good | General use, good balance |
+| `small` | 244M | Medium | Better | Important recordings |
+| `medium` | 769M | Slow | High | Critical applications |
+| `large` | 1550M | Slowest | Highest | Research, maximum accuracy |
+
+## 🏗️ Technical Architecture
+
+```
+Audio Input → Recording/Streaming → Whisper Model → Text Processing → Output
+    │              │                    │                │
+    │              ├── Batch Mode       ├── Model        ├── Sentence
+    │              ├── Streaming Mode   │   Selection    │   Detection
+    │              └── Interactive      └── Language     └── Overlap
+    │                  Mode                Detection        Handling
+    │
+    └── Device Selection
+        (Audio Input, CPU/MPS/CUDA)
+```
+
+## 📈 Project Status
+
+- **Core Features**: ✅ Complete and stable
+- **Streaming Features**: ✅ Complete with GUI support
+- **Workflow Control**: ✅ Three-level system implemented
+- **Documentation**: ✅ Comprehensive documentation in English and Chinese
+- **Testing**: ✅ Basic testing implemented
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see the [contributing guidelines](docs/en/README.md#contributing) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📞 Support
+
+- **Documentation**: Refer to the documentation in `docs/` directory
+- **Issues**: Report issues on GitHub
+- **Questions**: Check the example usage scripts and documentation
+
+---
+
+**Last Updated**: 2026-02-21
+**Version**: 2.0.0 (with comprehensive workflow control system)
