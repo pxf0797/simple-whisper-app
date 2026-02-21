@@ -365,31 +365,107 @@ execute_quick_record() {
     echo -e "${YELLOW}quick_record.sh not found, using built-in workflow${NC}"
     echo ""
 
-    # Model selection
-    MODEL=$(select_model_interactive 2)
+    # Configuration mode selection
+    echo -e "${YELLOW}Select configuration mode:${NC}"
+    echo "  1) Quick setup (recommended for most users)"
+    echo "     • Base model, auto language detection, default audio device"
+    echo "     • CPU computation, balanced settings"
+    echo ""
+    echo "  2) Standard setup (balanced performance)"
+    echo "     • Small model, auto language, default audio device"
+    echo "     • Good balance between speed and accuracy"
+    echo ""
+    echo "  3) High quality setup (maximum accuracy)"
+    echo "     • Medium model, auto language, default audio device"
+    echo "     • Higher accuracy, slower processing"
+    echo ""
+    echo "  4) Custom setup (full control)"
+    echo "     • Select all parameters manually"
+    echo ""
 
-    # Language selection
-    LANGUAGE_RESULT=$(select_language_interactive)
+    read -p "Select mode (1-4, default: 1): " CONFIG_MODE
+    CONFIG_MODE=${CONFIG_MODE:-1}
 
-    # Parse language result (may contain simplified chinese setting)
-    LANGUAGE=""
-    SIMPLIFIED_CHINESE=""
-    if [ -n "$LANGUAGE_RESULT" ]; then
-        if [[ "$LANGUAGE_RESULT" == *:* ]]; then
-            # Format: "language:simplified" or "multi:lang1,lang2:simplified"
-            LANGUAGE="${LANGUAGE_RESULT%:*}"
-            SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
-        else
-            LANGUAGE="$LANGUAGE_RESULT"
+    case $CONFIG_MODE in
+        1)
+            # Quick setup - base model, auto language, default device, CPU
+            echo -e "${GREEN}Using quick setup (base model, auto language)${NC}"
+            MODEL="base"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DEVICE="cpu"
+            ;;
+        2)
+            # Standard setup - small model, auto language, default device, CPU
+            echo -e "${GREEN}Using standard setup (balanced performance)${NC}"
+            MODEL="small"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DEVICE="cpu"
+            ;;
+        3)
+            # High quality setup - medium model, auto language, default device, CPU
+            echo -e "${GREEN}Using high quality setup (maximum accuracy)${NC}"
+            MODEL="medium"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DEVICE="cpu"
+            ;;
+        4)
+            # Custom setup - interactive selection
+            echo -e "${GREEN}Custom setup - select parameters manually${NC}"
+
+            # Model selection
+            MODEL=$(select_model_interactive 2)
+
+            # Language selection
+            LANGUAGE_RESULT=$(select_language_interactive)
+
+            # Parse language result (may contain simplified chinese setting)
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            if [ -n "$LANGUAGE_RESULT" ]; then
+                if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+                    # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+                    LANGUAGE="${LANGUAGE_RESULT%:*}"
+                    SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+                else
+                    LANGUAGE="$LANGUAGE_RESULT"
+                fi
+            fi
+
+            # Audio device selection
+            echo -e "\n${BLUE}Audio Device Selection:${NC}"
+            INPUT_DEVICE=$(select_audio_device_interactive)
+
+            # Computation device selection
+            DEVICE=$(select_device_interactive)
+            ;;
+        *)
+            # Default to quick setup
+            echo -e "${GREEN}Using quick setup (base model, auto language)${NC}"
+            MODEL="base"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DEVICE="cpu"
+            ;;
+    esac
+
+    # For preset modes (1-3), get default audio device
+    if [ "$CONFIG_MODE" -le 3 ]; then
+        echo "Getting default audio device..."
+        INPUT_DEVICE=$(python -c "
+import sounddevice as sd
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+        if [ -z "$INPUT_DEVICE" ]; then
+            INPUT_DEVICE=""
         fi
     fi
-
-    # Audio device selection
-    echo -e "\n${BLUE}Audio Device Selection:${NC}"
-    INPUT_DEVICE=$(select_audio_device_interactive)
-
-    # Computation device selection
-    DEVICE=$(select_device_interactive)
 
     # Duration selection
     echo -e "\n${BLUE}Recording Duration:${NC}"
@@ -460,9 +536,9 @@ execute_quick_record() {
     echo "  Text output: $TEXT_FILE"
     echo ""
 
-    read -p "Start recording? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    read -p "Start recording? (y/n): " START_RESPONSE
+    START_RESPONSE=$(echo "$START_RESPONSE" | tr -d '[:space:]')
+    if [[ ! "$START_RESPONSE" =~ ^[Yy] ]]; then
         echo -e "${YELLOW}Cancelled${NC}"
         return
     fi
@@ -496,9 +572,9 @@ execute_live_streaming() {
         echo -e "${YELLOW}Streaming features require stream_whisper.py${NC}"
         echo "You can use simple_whisper.py with --stream flag instead."
         echo ""
-        read -p "Use simple_whisper.py with --stream? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        read -p "Use simple_whisper.py with --stream? (y/n): " STREAM_RESPONSE
+        STREAM_RESPONSE=$(echo "$STREAM_RESPONSE" | tr -d '[:space:]')
+        if [[ ! "$STREAM_RESPONSE" =~ ^[Yy] ]]; then
             return
         fi
         USE_SIMPLE_STREAM=true
@@ -506,39 +582,123 @@ execute_live_streaming() {
         USE_SIMPLE_STREAM=false
     fi
 
+    # Configuration mode selection
+    echo -e "${YELLOW}Select configuration mode:${NC}"
+    echo "  1) Quick setup (recommended for most users)"
+    echo "     • Fast model, auto language detection, default audio device"
+    echo "     • Balanced settings for real-time transcription"
+    echo ""
+    echo "  2) Standard setup (balanced performance)"
+    echo "     • Base model, auto language, default audio device"
+    echo "     • Good balance between speed and accuracy"
+    echo ""
+    echo "  3) High quality setup (maximum accuracy)"
+    echo "     • Medium model, auto language, default audio device"
+    echo "     • Higher accuracy, slower processing"
+    echo ""
+    echo "  4) Custom setup (full control)"
+    echo "     • Select all parameters manually"
+    echo ""
+
+    read -p "Select mode (1-4, default: 1): " CONFIG_MODE
+    CONFIG_MODE=${CONFIG_MODE:-1}
+
     # Streaming configuration
     echo -e "${BLUE}Streaming Configuration:${NC}"
 
-    # Model selection
-    MODEL=$(select_model_interactive 1)
+    case $CONFIG_MODE in
+        1)
+            # Quick setup - fast model, auto language, default device
+            echo -e "${GREEN}Using quick setup (fast model, auto language)${NC}"
+            MODEL="tiny"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DURATION=30
+            CHUNK_DUR=3.0
+            OVERLAP=1.0
+            ;;
+        2)
+            # Standard setup - balanced performance
+            echo -e "${GREEN}Using standard setup (balanced performance)${NC}"
+            MODEL="base"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DURATION=30
+            CHUNK_DUR=3.0
+            OVERLAP=1.0
+            ;;
+        3)
+            # High quality setup - maximum accuracy
+            echo -e "${GREEN}Using high quality setup (maximum accuracy)${NC}"
+            MODEL="medium"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DURATION=30
+            CHUNK_DUR=5.0
+            OVERLAP=2.0
+            ;;
+        4)
+            # Custom setup - interactive selection
+            echo -e "${GREEN}Custom setup - select parameters manually${NC}"
 
-    # Language selection
-    LANGUAGE_RESULT=$(select_language_interactive)
+            # Model selection
+            MODEL=$(select_model_interactive 1)
 
-    # Parse language result (may contain simplified chinese setting)
-    LANGUAGE=""
-    SIMPLIFIED_CHINESE=""
-    if [ -n "$LANGUAGE_RESULT" ]; then
-        if [[ "$LANGUAGE_RESULT" == *:* ]]; then
-            # Format: "language:simplified" or "multi:lang1,lang2:simplified"
-            LANGUAGE="${LANGUAGE_RESULT%:*}"
-            SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
-        else
-            LANGUAGE="$LANGUAGE_RESULT"
+            # Language selection
+            LANGUAGE_RESULT=$(select_language_interactive)
+
+            # Parse language result (may contain simplified chinese setting)
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            if [ -n "$LANGUAGE_RESULT" ]; then
+                if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+                    # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+                    LANGUAGE="${LANGUAGE_RESULT%:*}"
+                    SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+                else
+                    LANGUAGE="$LANGUAGE_RESULT"
+                fi
+            fi
+
+            # Audio device selection
+            INPUT_DEVICE=$(select_audio_device_interactive)
+
+            read -p "Test duration in seconds (default: 30): " DURATION
+            DURATION=${DURATION:-30}
+
+            read -p "Chunk duration in seconds (default: 3.0): " CHUNK_DUR
+            CHUNK_DUR=${CHUNK_DUR:-3.0}
+
+            read -p "Overlap in seconds (default: 1.0): " OVERLAP
+            OVERLAP=${OVERLAP:-1.0}
+            ;;
+        *)
+            # Default to quick setup
+            echo -e "${GREEN}Using quick setup (fast model, auto language)${NC}"
+            MODEL="tiny"
+            LANGUAGE=""
+            SIMPLIFIED_CHINESE=""
+            DURATION=30
+            CHUNK_DUR=3.0
+            OVERLAP=1.0
+            ;;
+    esac
+
+    # For preset modes (1-3), get default audio device
+    if [ "$CONFIG_MODE" -le 3 ]; then
+        echo "Getting default audio device..."
+        INPUT_DEVICE=$(python -c "
+import sounddevice as sd
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+        if [ -z "$INPUT_DEVICE" ]; then
+            INPUT_DEVICE=""
         fi
     fi
-
-    # Audio device selection
-    INPUT_DEVICE=$(select_audio_device_interactive)
-
-    read -p "Test duration in seconds (default: 30): " DURATION
-    DURATION=${DURATION:-30}
-
-    read -p "Chunk duration in seconds (default: 3.0): " CHUNK_DUR
-    CHUNK_DUR=${CHUNK_DUR:-3.0}
-
-    read -p "Overlap in seconds (default: 1.0): " OVERLAP
-    OVERLAP=${OVERLAP:-1.0}
 
     if [ "$USE_SIMPLE_STREAM" = true ]; then
         CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --stream --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
@@ -592,9 +752,9 @@ execute_live_streaming() {
     echo "  Command: $CMD"
     echo ""
 
-    read -p "Start streaming? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    read -p "Start streaming? (y/n): " START_RESPONSE
+    START_RESPONSE=$(echo "$START_RESPONSE" | tr -d '[:space:]')
+    if [[ ! "$START_RESPONSE" =~ ^[Yy] ]]; then
         echo -e "${YELLOW}Cancelled${NC}"
         return
     fi
