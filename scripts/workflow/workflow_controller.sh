@@ -444,28 +444,25 @@ execute_quick_record() {
 
     case $CONFIG_MODE in
         1)
-            # Quick setup - base model, auto language, default device, CPU
+            # Quick setup - base model, auto language, default device
             echo -e "${GREEN}Using quick setup (base model, auto language)${NC}"
             MODEL="base"
             LANGUAGE=""
             SIMPLIFIED_CHINESE=""
-            DEVICE="cpu"
             ;;
         2)
-            # Standard setup - small model, auto language, default device, CPU
+            # Standard setup - small model, auto language, default device
             echo -e "${GREEN}Using standard setup (balanced performance)${NC}"
             MODEL="small"
             LANGUAGE=""
             SIMPLIFIED_CHINESE=""
-            DEVICE="cpu"
             ;;
         3)
-            # High quality setup - medium model, auto language, default device, CPU
+            # High quality setup - medium model, auto language, default device
             echo -e "${GREEN}Using high quality setup (maximum accuracy)${NC}"
             MODEL="medium"
             LANGUAGE=""
             SIMPLIFIED_CHINESE=""
-            DEVICE="cpu"
             ;;
         4)
             # Custom setup - interactive selection
@@ -503,7 +500,6 @@ execute_quick_record() {
             MODEL="base"
             LANGUAGE=""
             SIMPLIFIED_CHINESE=""
-            DEVICE="cpu"
             ;;
     esac
 
@@ -527,6 +523,11 @@ execute_quick_record() {
     if [ -n "$INPUT_DEVICE_ARG" ]; then
         INPUT_DEVICE="$INPUT_DEVICE_ARG"
         echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
+    fi
+
+    # Computation device selection (if not specified via command line)
+    if [ -z "$DEVICE" ]; then
+        DEVICE=$(select_device_interactive)
     fi
 
     # For preset modes (1-3), get default audio device
@@ -662,6 +663,7 @@ execute_live_streaming() {
     local LANGUAGE_OVERRIDE=""
     local DURATION_ARG=""
     local INPUT_DEVICE_ARG=""
+    local DEVICE_ARG=""
     local CHUNK_DUR_ARG=""
     local OVERLAP_ARG=""
     local SIMPLIFIED_CHINESE_ARG=""
@@ -687,6 +689,10 @@ execute_live_streaming() {
                 ;;
             --input-device)
                 INPUT_DEVICE_ARG="$2"
+                shift 2
+                ;;
+            --device)
+                DEVICE_ARG="$2"
                 shift 2
                 ;;
             --chunk-duration)
@@ -817,6 +823,9 @@ execute_live_streaming() {
             # Audio device selection
             INPUT_DEVICE=$(select_audio_device_interactive)
 
+            # Computation device selection
+            DEVICE=$(select_device_interactive)
+
             read -p "Test duration in seconds (default: 30): " DURATION
             DURATION=${DURATION:-30}
 
@@ -851,6 +860,10 @@ execute_live_streaming() {
         SIMPLIFIED_CHINESE="$SIMPLIFIED_CHINESE_ARG"
         echo -e "${GREEN}Overriding simplified Chinese to: $SIMPLIFIED_CHINESE${NC}"
     fi
+    if [ -n "$DEVICE_ARG" ]; then
+        DEVICE="$DEVICE_ARG"
+        echo -e "${GREEN}Overriding computation device to: $DEVICE${NC}"
+    fi
     if [ -n "$DURATION_ARG" ]; then
         DURATION="$DURATION_ARG"
         echo -e "${GREEN}Overriding duration to: $DURATION seconds${NC}"
@@ -866,6 +879,11 @@ execute_live_streaming() {
     if [ -n "$INPUT_DEVICE_ARG" ]; then
         INPUT_DEVICE="$INPUT_DEVICE_ARG"
         echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
+    fi
+
+    # Computation device selection (if not specified via command line)
+    if [ -z "$DEVICE" ]; then
+        DEVICE=$(select_device_interactive)
     fi
 
     # For preset modes (1-3), get default audio device
@@ -910,6 +928,11 @@ except:
         CMD="$CMD --input-device $INPUT_DEVICE"
     fi
 
+    # Add computation device if specified
+    if [ -n "$DEVICE" ]; then
+        CMD="$CMD --device $DEVICE"
+    fi
+
     echo -e "\n${GREEN}Streaming configuration:${NC}"
     echo "  Model: $MODEL"
 
@@ -936,6 +959,7 @@ except:
     fi
 
     echo "  Audio device: ${INPUT_DEVICE:-default}"
+    echo "  Computation device: ${DEVICE:-auto}"
     echo "  Duration: $DURATION seconds"
     echo "  Chunk duration: $CHUNK_DUR seconds"
     echo "  Overlap: $OVERLAP seconds"
@@ -984,6 +1008,9 @@ execute_batch_processing() {
 
     read -p "Language code (empty for auto detect): " LANGUAGE
 
+    # Computation device selection
+    DEVICE=$(select_device_interactive)
+
     mkdir -p "$OUTPUT_DIR"
 
     echo -e "\n${GREEN}Batch processing configuration:${NC}"
@@ -991,6 +1018,7 @@ execute_batch_processing() {
     echo "  Output directory: $OUTPUT_DIR"
     echo "  Model: $MODEL"
     echo "  Language: ${LANGUAGE:-auto detect}"
+    echo "  Computation device: ${DEVICE:-auto}"
     echo ""
 
     if [ ! -d "$INPUT_DIR" ]; then
@@ -1025,6 +1053,9 @@ execute_batch_processing() {
             echo "Processing [$count]: $base_name"
 
             CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --audio \"$audio_file\" --model $MODEL --output-text \"$output_file\""
+            if [ -n "$DEVICE" ]; then
+                CMD="$CMD --device $DEVICE"
+            fi
             if [ -n "$LANGUAGE" ]; then
                 CMD="$CMD --language $LANGUAGE"
             fi
