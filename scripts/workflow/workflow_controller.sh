@@ -125,6 +125,62 @@ select_workflow() {
     esac
 }
 
+# Function to select audio device interactively
+select_audio_device_interactive() {
+    local default_device=""
+
+    echo -e "${BLUE}Audio Device Selection:${NC}"
+    echo "Listing available audio input devices..."
+    python $PROJECT_ROOT/src/core/simple_whisper.py --list-audio-devices
+
+    # Get default device ID
+    default_device=$(python -c "
+import sounddevice as sd
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+
+    if [ -n "$default_device" ]; then
+        echo -e "\nDefault device ID: $default_device"
+        read -p "Enter device ID (press Enter for default $default_device): " device_input
+        if [ -n "$device_input" ]; then
+            echo "$device_input"
+        else
+            echo "$default_device"
+        fi
+    else
+        read -p "Enter device ID: " device_input
+        echo "$device_input"
+    fi
+}
+
+# Function to select model interactively
+select_model_interactive() {
+    local default_choice=${1:-2}
+
+    echo -e "${BLUE}Model Selection:${NC}"
+    echo "  1) tiny    - Fastest, lowest accuracy"
+    echo "  2) base    - Good balance"
+    echo "  3) small   - Better accuracy"
+    echo "  4) medium  - High accuracy"
+    echo "  5) large   - Highest accuracy"
+
+    while true; do
+        read -p "Select model (1-5, default: $default_choice): " model_choice
+        case $model_choice in
+            1) echo "tiny"; break ;;
+            2|"") echo "base"; break ;;
+            3) echo "small"; break ;;
+            4) echo "medium"; break ;;
+            5) echo "large"; break ;;
+            *) echo "Please enter a number 1-5" ;;
+        esac
+    done
+}
+
 # Function: Quick Record & Transcribe
 execute_quick_record() {
     log_message "INFO" "Starting Quick Record workflow"
@@ -144,24 +200,7 @@ execute_quick_record() {
     echo ""
 
     # Model selection
-    echo -e "${BLUE}Model Selection:${NC}"
-    echo "  1) tiny    - Fastest, lowest accuracy"
-    echo "  2) base    - Good balance"
-    echo "  3) small   - Better accuracy"
-    echo "  4) medium  - High accuracy"
-    echo "  5) large   - Highest accuracy"
-
-    while true; do
-        read -p "Select model (1-5, default: 2): " MODEL_CHOICE
-        case $MODEL_CHOICE in
-            1|"") MODEL="tiny"; break ;;
-            2) MODEL="base"; break ;;
-            3) MODEL="small"; break ;;
-            4) MODEL="medium"; break ;;
-            5) MODEL="large"; break ;;
-            *) echo "Please enter a number 1-5" ;;
-        esac
-    done
+    MODEL=$(select_model_interactive 2)
 
     # Language selection
     echo -e "\n${BLUE}Language Selection:${NC}"
@@ -181,6 +220,10 @@ execute_quick_record() {
         5) read -p "Enter language code: " LANGUAGE ;;
         *) LANGUAGE="" ;;
     esac
+
+    # Audio device selection
+    echo -e "\n${BLUE}Audio Device Selection:${NC}"
+    INPUT_DEVICE=$(select_audio_device_interactive)
 
     # Duration selection
     echo -e "\n${BLUE}Recording Duration:${NC}"
@@ -207,9 +250,14 @@ execute_quick_record() {
         CMD="$CMD --duration $DURATION"
     fi
 
+    if [ -n "$INPUT_DEVICE" ]; then
+        CMD="$CMD --input-device $INPUT_DEVICE"
+    fi
+
     echo -e "\n${GREEN}Configuration:${NC}"
     echo "  Model: $MODEL"
     echo "  Language: ${LANGUAGE:-auto detect}"
+    echo "  Audio device: ${INPUT_DEVICE:-default}"
     echo "  Duration: ${DURATION:-manual stop}"
     echo "  Audio output: $AUDIO_FILE"
     echo "  Text output: $TEXT_FILE"
@@ -264,8 +312,11 @@ execute_live_streaming() {
     # Streaming configuration
     echo -e "${BLUE}Streaming Configuration:${NC}"
 
-    read -p "Model (tiny/base/small, default: tiny): " MODEL
-    MODEL=${MODEL:-tiny}
+    # Model selection
+    MODEL=$(select_model_interactive 1)
+
+    # Audio device selection
+    INPUT_DEVICE=$(select_audio_device_interactive)
 
     read -p "Test duration in seconds (default: 30): " DURATION
     DURATION=${DURATION:-30}
@@ -282,8 +333,14 @@ execute_live_streaming() {
         CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
     fi
 
+    # Add input device if specified
+    if [ -n "$INPUT_DEVICE" ]; then
+        CMD="$CMD --input-device $INPUT_DEVICE"
+    fi
+
     echo -e "\n${GREEN}Streaming configuration:${NC}"
     echo "  Model: $MODEL"
+    echo "  Audio device: ${INPUT_DEVICE:-default}"
     echo "  Duration: $DURATION seconds"
     echo "  Chunk duration: $CHUNK_DUR seconds"
     echo "  Overlap: $OVERLAP seconds"
@@ -323,8 +380,8 @@ execute_batch_processing() {
     read -p "Output directory (default: transcriptions): " OUTPUT_DIR
     OUTPUT_DIR=${OUTPUT_DIR:-transcriptions}
 
-    read -p "Model (tiny/base/small/medium/large, default: base): " MODEL
-    MODEL=${MODEL:-base}
+    # Model selection
+    MODEL=$(select_model_interactive 2)
 
     read -p "Language code (empty for auto detect): " LANGUAGE
 
