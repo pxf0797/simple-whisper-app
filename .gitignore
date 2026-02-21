@@ -86,3 +86,7 @@ test_*
 system_test_*
 # Except important test scripts
 !test_stream.py
+
+# Configuration alias files (auto-generated)
+folder-alias.json
+private-folder-alias.json
