@@ -1,0 +1,44 @@
+{
+    "tasks": {
+        "check_env": {
+            "description": "Check environment and dependencies",
+            "command": "check_environment",
+            "type": "internal"
+        },
+        "select_params": {
+            "description": "Select recording parameters",
+            "command": "select_parameters",
+            "type": "interactive"
+        },
+        "record_audio": {
+            "description": "Record audio",
+            "command": "record_audio_task",
+            "type": "execution"
+        },
+        "transcribe": {
+            "description": "Transcribe recorded audio",
+            "command": "transcribe_audio_task",
+            "type": "execution"
+        },
+        "save_outputs": {
+            "description": "Save audio and transcription files",
+            "command": "save_outputs_task",
+            "type": "execution"
+        },
+        "stream_setup": {
+            "description": "Setup streaming parameters",
+            "command": "stream_setup_task",
+            "type": "interactive"
+        },
+        "start_stream": {
+            "description": "Start streaming transcription",
+            "command": "start_stream_task",
+            "type": "execution"
+        },
+        "monitor_stream": {
+            "description": "Monitor streaming process",
+            "command": "monitor_stream_task",
+            "type": "monitoring"
+        }
+    }
+}

@@ -1,0 +1,29 @@
+{
+    "workflows": {
+        "quick_record": {
+            "description": "Quick recording workflow",
+            "tasks": ["check_env", "select_params", "record_audio", "transcribe", "save_outputs"]
+        },
+        "stream_live": {
+            "description": "Live streaming transcription",
+            "tasks": ["check_env", "stream_setup", "start_stream", "monitor_stream"]
+        },
+        "batch_process": {
+            "description": "Batch processing workflow",
+            "tasks": ["check_env", "select_input_dir", "process_files", "generate_report"]
+        },
+        "system_test": {
+            "description": "System testing workflow",
+            "tasks": ["check_env", "test_audio", "test_models", "test_streaming", "generate_test_report"]
+        }
+    },
+    "settings": {
+        "default_model": "base",
+        "default_language": "auto",
+        "audio_device": "default",
+        "computation_device": "auto",
+        "log_level": "INFO",
+        "max_retries": 3,
+        "retry_delay": 5
+    }
+}
