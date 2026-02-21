@@ -351,6 +351,57 @@ select_device_interactive() {
 execute_quick_record() {
     log_message "INFO" "Starting Quick Record workflow"
 
+    # Parse command line arguments for this workflow
+    local PRESET=""
+    local MODEL_OVERRIDE=""
+    local LANGUAGE_OVERRIDE=""
+    local DURATION_ARG=""
+    local INPUT_DEVICE_ARG=""
+    local DEVICE_ARG=""
+    local SIMPLIFIED_CHINESE_ARG=""
+    local AUTO_START=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --preset)
+                PRESET="$2"
+                shift 2
+                ;;
+            --model)
+                MODEL_OVERRIDE="$2"
+                shift 2
+                ;;
+            --language)
+                LANGUAGE_OVERRIDE="$2"
+                shift 2
+                ;;
+            --duration)
+                DURATION_ARG="$2"
+                shift 2
+                ;;
+            --input-device)
+                INPUT_DEVICE_ARG="$2"
+                shift 2
+                ;;
+            --device)
+                DEVICE_ARG="$2"
+                shift 2
+                ;;
+            --simplified-chinese)
+                SIMPLIFIED_CHINESE_ARG="$2"
+                shift 2
+                ;;
+            --auto-start)
+                AUTO_START=true
+                shift
+                ;;
+            *)
+                # Skip unknown arguments or keep for quick_record.sh
+                shift
+                ;;
+        esac
+    done
+
     echo -e "${CYAN}Quick Record & Transcribe${NC}"
     echo ""
 
@@ -383,8 +434,13 @@ execute_quick_record() {
     echo "     • Select all parameters manually"
     echo ""
 
-    read -p "Select mode (1-4, default: 1): " CONFIG_MODE
-    CONFIG_MODE=${CONFIG_MODE:-1}
+    if [ -n "$PRESET" ]; then
+        CONFIG_MODE="$PRESET"
+        echo -e "${GREEN}Using preset mode $PRESET${NC}"
+    else
+        read -p "Select mode (1-4, default: 1): " CONFIG_MODE
+        CONFIG_MODE=${CONFIG_MODE:-1}
+    fi
 
     case $CONFIG_MODE in
         1)
@@ -451,6 +507,28 @@ execute_quick_record() {
             ;;
     esac
 
+    # Apply parameter overrides from command line
+    if [ -n "$MODEL_OVERRIDE" ]; then
+        MODEL="$MODEL_OVERRIDE"
+        echo -e "${GREEN}Overriding model to: $MODEL${NC}"
+    fi
+    if [ -n "$LANGUAGE_OVERRIDE" ]; then
+        LANGUAGE="$LANGUAGE_OVERRIDE"
+        echo -e "${GREEN}Overriding language to: $LANGUAGE${NC}"
+    fi
+    if [ -n "$SIMPLIFIED_CHINESE_ARG" ]; then
+        SIMPLIFIED_CHINESE="$SIMPLIFIED_CHINESE_ARG"
+        echo -e "${GREEN}Overriding simplified Chinese to: $SIMPLIFIED_CHINESE${NC}"
+    fi
+    if [ -n "$DEVICE_ARG" ]; then
+        DEVICE="$DEVICE_ARG"
+        echo -e "${GREEN}Overriding computation device to: $DEVICE${NC}"
+    fi
+    if [ -n "$INPUT_DEVICE_ARG" ]; then
+        INPUT_DEVICE="$INPUT_DEVICE_ARG"
+        echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
+    fi
+
     # For preset modes (1-3), get default audio device
     if [ "$CONFIG_MODE" -le 3 ]; then
         echo "Getting default audio device..."
@@ -465,14 +543,25 @@ except:
         if [ -z "$INPUT_DEVICE" ]; then
             INPUT_DEVICE=""
         fi
+
+        # Override with command line argument if provided
+        if [ -n "$INPUT_DEVICE_ARG" ]; then
+            INPUT_DEVICE="$INPUT_DEVICE_ARG"
+            echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
+        fi
     fi
 
     # Duration selection
-    echo -e "\n${BLUE}Recording Duration:${NC}"
-    echo "  Enter duration in seconds (e.g., 10, 60, 300)"
-    echo "  Or press Enter for manual stop (Ctrl+C to stop)"
-    echo ""
-    read -p "Duration (seconds, empty for manual): " DURATION
+    if [ -n "$DURATION_ARG" ]; then
+        DURATION="$DURATION_ARG"
+        echo -e "${GREEN}Using duration from command line: $DURATION seconds${NC}"
+    else
+        echo -e "\n${BLUE}Recording Duration:${NC}"
+        echo "  Enter duration in seconds (e.g., 10, 60, 300)"
+        echo "  Or press Enter for manual stop (Ctrl+C to stop)"
+        echo ""
+        read -p "Duration (seconds, empty for manual): " DURATION
+    fi
 
     # Generate output filenames
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -536,11 +625,15 @@ except:
     echo "  Text output: $TEXT_FILE"
     echo ""
 
-    read -p "Start recording? (y/n): " START_RESPONSE
-    START_RESPONSE=$(echo "$START_RESPONSE" | tr -d '[:space:]')
-    if [[ ! "$START_RESPONSE" =~ ^[Yy] ]]; then
-        echo -e "${YELLOW}Cancelled${NC}"
-        return
+    if [ "$AUTO_START" = true ]; then
+        echo -e "${GREEN}Auto-start enabled, starting immediately...${NC}"
+    else
+        read -p "Start recording? (y/n): " START_RESPONSE
+        START_RESPONSE=$(echo "$START_RESPONSE" | tr -d '[:space:]')
+        if [[ ! "$START_RESPONSE" =~ ^[Yy] ]]; then
+            echo -e "${YELLOW}Cancelled${NC}"
+            return
+        fi
     fi
 
     echo -e "${GREEN}Starting recording...${NC}"
@@ -562,6 +655,62 @@ except:
 # Function: Live Streaming Transcription
 execute_live_streaming() {
     log_message "INFO" "Starting Live Streaming workflow"
+
+    # Parse command line arguments for this workflow
+    local PRESET=""
+    local MODEL_OVERRIDE=""
+    local LANGUAGE_OVERRIDE=""
+    local DURATION_ARG=""
+    local INPUT_DEVICE_ARG=""
+    local CHUNK_DUR_ARG=""
+    local OVERLAP_ARG=""
+    local SIMPLIFIED_CHINESE_ARG=""
+    local AUTO_START=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --preset)
+                PRESET="$2"
+                shift 2
+                ;;
+            --model)
+                MODEL_OVERRIDE="$2"
+                shift 2
+                ;;
+            --language)
+                LANGUAGE_OVERRIDE="$2"
+                shift 2
+                ;;
+            --duration)
+                DURATION_ARG="$2"
+                shift 2
+                ;;
+            --input-device)
+                INPUT_DEVICE_ARG="$2"
+                shift 2
+                ;;
+            --chunk-duration)
+                CHUNK_DUR_ARG="$2"
+                shift 2
+                ;;
+            --overlap)
+                OVERLAP_ARG="$2"
+                shift 2
+                ;;
+            --simplified-chinese)
+                SIMPLIFIED_CHINESE_ARG="$2"
+                shift 2
+                ;;
+            --auto-start)
+                AUTO_START=true
+                shift
+                ;;
+            *)
+                # Skip unknown arguments
+                shift
+                ;;
+        esac
+    done
 
     echo -e "${CYAN}Live Streaming Transcription${NC}"
     echo ""
@@ -600,8 +749,13 @@ execute_live_streaming() {
     echo "     • Select all parameters manually"
     echo ""
 
-    read -p "Select mode (1-4, default: 1): " CONFIG_MODE
-    CONFIG_MODE=${CONFIG_MODE:-1}
+    if [ -n "$PRESET" ]; then
+        CONFIG_MODE="$PRESET"
+        echo -e "${GREEN}Using preset mode $PRESET${NC}"
+    else
+        read -p "Select mode (1-4, default: 1): " CONFIG_MODE
+        CONFIG_MODE=${CONFIG_MODE:-1}
+    fi
 
     # Streaming configuration
     echo -e "${BLUE}Streaming Configuration:${NC}"
@@ -684,6 +838,36 @@ execute_live_streaming() {
             ;;
     esac
 
+    # Apply parameter overrides from command line
+    if [ -n "$MODEL_OVERRIDE" ]; then
+        MODEL="$MODEL_OVERRIDE"
+        echo -e "${GREEN}Overriding model to: $MODEL${NC}"
+    fi
+    if [ -n "$LANGUAGE_OVERRIDE" ]; then
+        LANGUAGE="$LANGUAGE_OVERRIDE"
+        echo -e "${GREEN}Overriding language to: $LANGUAGE${NC}"
+    fi
+    if [ -n "$SIMPLIFIED_CHINESE_ARG" ]; then
+        SIMPLIFIED_CHINESE="$SIMPLIFIED_CHINESE_ARG"
+        echo -e "${GREEN}Overriding simplified Chinese to: $SIMPLIFIED_CHINESE${NC}"
+    fi
+    if [ -n "$DURATION_ARG" ]; then
+        DURATION="$DURATION_ARG"
+        echo -e "${GREEN}Overriding duration to: $DURATION seconds${NC}"
+    fi
+    if [ -n "$CHUNK_DUR_ARG" ]; then
+        CHUNK_DUR="$CHUNK_DUR_ARG"
+        echo -e "${GREEN}Overriding chunk duration to: $CHUNK_DUR seconds${NC}"
+    fi
+    if [ -n "$OVERLAP_ARG" ]; then
+        OVERLAP="$OVERLAP_ARG"
+        echo -e "${GREEN}Overriding overlap to: $OVERLAP seconds${NC}"
+    fi
+    if [ -n "$INPUT_DEVICE_ARG" ]; then
+        INPUT_DEVICE="$INPUT_DEVICE_ARG"
+        echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
+    fi
+
     # For preset modes (1-3), get default audio device
     if [ "$CONFIG_MODE" -le 3 ]; then
         echo "Getting default audio device..."
@@ -697,6 +881,12 @@ except:
 ")
         if [ -z "$INPUT_DEVICE" ]; then
             INPUT_DEVICE=""
+        fi
+
+        # Override with command line argument if provided
+        if [ -n "$INPUT_DEVICE_ARG" ]; then
+            INPUT_DEVICE="$INPUT_DEVICE_ARG"
+            echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
         fi
     fi
 
@@ -752,11 +942,15 @@ except:
     echo "  Command: $CMD"
     echo ""
 
-    read -p "Start streaming? (y/n): " START_RESPONSE
-    START_RESPONSE=$(echo "$START_RESPONSE" | tr -d '[:space:]')
-    if [[ ! "$START_RESPONSE" =~ ^[Yy] ]]; then
-        echo -e "${YELLOW}Cancelled${NC}"
-        return
+    if [ "$AUTO_START" = true ]; then
+        echo -e "${GREEN}Auto-start enabled, starting immediately...${NC}"
+    else
+        read -p "Start streaming? (y/n): " START_RESPONSE
+        START_RESPONSE=$(echo "$START_RESPONSE" | tr -d '[:space:]')
+        if [[ ! "$START_RESPONSE" =~ ^[Yy] ]]; then
+            echo -e "${YELLOW}Cancelled${NC}"
+            return
+        fi
     fi
 
     echo -e "${GREEN}Starting streaming transcription...${NC}"
@@ -1023,11 +1217,30 @@ show_help() {
     echo "  --log          Show latest log"
     echo "  --cleanup      Clean temporary files"
     echo ""
+    echo "Workflow Parameters (for --workflow 1 and 2):"
+    echo "  --preset N      Preset mode: 1=Quick, 2=Standard, 3=High quality, 4=Custom"
+    echo "  --model NAME    Override model: tiny, base, small, medium, large"
+    echo "  --language CODE Language code (empty for auto): en, zh, ja, etc."
+    echo "  --duration SEC  Recording/streaming duration in seconds"
+    echo "  --input-device ID Audio input device ID"
+    echo "  --device TYPE   Computation device: cpu, mps, cuda"
+    echo "  --simplified-chinese yes/no Convert Chinese to simplified"
+    echo "  --auto-start    Skip confirmation and start immediately"
+    echo ""
     echo "Examples:"
     echo "  $0                     # Interactive menu"
     echo "  $0 --workflow 1        # Quick Record workflow"
     echo "  $0 --workflow 3        # Batch Processing workflow"
     echo "  $0 --log               # Show latest log"
+    echo ""
+    echo "  # Quick start with presets:"
+    echo "  $0 --workflow 1 --preset 1 --duration 10      # Quick recording"
+    echo "  $0 --workflow 2 --preset 2 --duration 30      # Standard streaming"
+    echo "  $0 --workflow 1 --preset 3 --duration 60      # High quality recording"
+    echo ""
+    echo "  # Custom parameters:"
+    echo "  $0 --workflow 1 --model base --language zh --duration 30"
+    echo "  $0 --workflow 2 --model small --input-device 4 --auto-start"
     exit 0
 }
 
