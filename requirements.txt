@@ -1,0 +1,12 @@
+# Core dependencies for simple whisper app
+torch
+torchaudio
+openai-whisper
+
+# Audio recording dependencies (optional but recommended)
+sounddevice
+soundfile
+
+# Numerical computation (usually installed as dependencies)
+numpy
+scipy

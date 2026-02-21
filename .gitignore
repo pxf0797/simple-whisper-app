@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Audio files (recordings)
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.aac
+recording_*.wav
+recording_*.txt
+test_*.wav
+test_*.txt
+real_test.wav
+real_test.txt
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Config files (except example)
+config.json
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Whisper model cache (optional, can be excluded if you want to include pre-downloaded models)
+# .cache/
+# ~/.cache/whisper/
+
+# Output folders
+output/
+transcriptions/
+test_transcriptions/
+
+# Test files
+test_*
+system_test_*

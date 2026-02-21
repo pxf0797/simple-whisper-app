@@ -1,0 +1,11 @@
+{
+  "default_model": "base",
+  "default_language": null,
+  "sample_rate": 16000,
+  "output_directory": "./recordings",
+  "save_audio": true,
+  "save_transcription": true,
+  "device": "auto",
+  "chunk_duration": 5,
+  "silence_threshold": 0.01
+}
