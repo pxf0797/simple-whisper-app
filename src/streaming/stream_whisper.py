@@ -8,6 +8,7 @@ Extends SimpleWhisper to add streaming capabilities with chunked processing.
 
 import sys
 import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import time
 import threading
 import queue
@@ -15,7 +16,7 @@ import numpy as np
 import sounddevice as sd
 import whisper
 from typing import Optional, Dict, List, Tuple
-from simple_whisper import SimpleWhisper
+from core.simple_whisper import SimpleWhisper
 
 
 class StreamWhisper(SimpleWhisper):

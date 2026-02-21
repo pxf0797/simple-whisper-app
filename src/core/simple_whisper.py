@@ -7,6 +7,7 @@ A minimal Python application for real-time audio recording and transcription usi
 import argparse
 import os
 import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import time
 import wave
 import sounddevice as sd
@@ -18,7 +19,7 @@ from datetime import datetime
 
 # Try to import streaming module (optional)
 try:
-    from stream_whisper import StreamWhisper
+    from streaming.stream_whisper import StreamWhisper
     HAS_STREAM = True
 except ImportError:
     HAS_STREAM = False

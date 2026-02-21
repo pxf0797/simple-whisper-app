@@ -14,4 +14,4 @@ else
 fi
 
 # Run the application with all arguments
-python "$SCRIPT_DIR/simple_whisper.py" "$@"
+python "$SCRIPT_DIR/src/core/simple_whisper.py" "$@"

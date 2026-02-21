@@ -11,13 +11,13 @@ import time
 import sounddevice as sd
 
 # Add current directory to path to import simple_whisper
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from simple_whisper import SimpleWhisper, list_audio_devices
 
 # Try to import StreamWhisper
 try:
-    from stream_whisper import StreamWhisper
+    from streaming.stream_whisper import StreamWhisper
     HAS_STREAM = True
 except ImportError:
     HAS_STREAM = False

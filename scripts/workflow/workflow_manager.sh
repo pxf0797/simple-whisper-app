@@ -362,7 +362,7 @@ record_audio_task() {
     fi
 
     # Build command
-    local CMD="python simple_whisper.py --record --output-audio $audio_file --output-text $text_file $params"
+    local CMD="python src/core/simple_whisper.py --record --output-audio $audio_file --output-text $text_file $params"
 
     log_message "INFO" "Command: $CMD"
     echo -e "${GREEN}Starting recording...${NC}"
@@ -411,7 +411,7 @@ transcribe_audio_task() {
     fi
 
     # Build command (transcribe existing audio file)
-    local CMD="python simple_whisper.py --audio \"$audio_file\" --output-text \"$text_file\" $params"
+    local CMD="python src/core/simple_whisper.py --audio \"$audio_file\" --output-text \"$text_file\" $params"
 
     log_message "INFO" "Transcribing audio file: $audio_file"
     log_message "INFO" "Command: $CMD"
@@ -530,7 +530,7 @@ execute_workflow() {
             read -p "Overlap (seconds, default: 1.0): " OVERLAP
             OVERLAP=${OVERLAP:-1.0}
 
-            CMD="python stream_whisper.py --model $STREAM_MODEL --duration $STREAM_DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+            CMD="python src/streaming/stream_whisper.py --model $STREAM_MODEL --duration $STREAM_DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
 
             log_message "INFO" "Starting live stream: $CMD"
             echo -e "${GREEN}Starting live streaming transcription...${NC}"
@@ -571,7 +571,7 @@ execute_workflow() {
 
                     echo "Processing [$count]: $base_name"
 
-                    CMD="python simple_whisper.py --audio \"$audio_file\" --model $BATCH_MODEL --output-text \"$output_file\""
+                    CMD="python src/core/simple_whisper.py --audio \"$audio_file\" --model $BATCH_MODEL --output-text \"$output_file\""
 
                     if eval $CMD; then
                         echo "  ✓ Saved to: $output_file"
@@ -601,7 +601,7 @@ execute_workflow() {
 
             # Test 2: Audio devices
             echo -e "${BLUE}Test 2: Audio Devices${NC}"
-            python simple_whisper.py --list-audio-devices
+            python src/core/simple_whisper.py --list-audio-devices
             echo ""
 
             # Test 3: Model loading
@@ -629,7 +629,7 @@ for model_size in ['tiny', 'base']:
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 TEST_AUDIO="test_recording_${TIMESTAMP}.wav"
                 echo "Recording 5 seconds of audio..."
-                python simple_whisper.py --record --duration 5 --model tiny --output-audio "$TEST_AUDIO"
+                python src/core/simple_whisper.py --record --duration 5 --model tiny --output-audio "$TEST_AUDIO"
 
                 if [ -f "$TEST_AUDIO" ]; then
                     echo "  ✓ Recording successful"
@@ -833,7 +833,7 @@ monitor_tools() {
             ;;
         5)
             echo -e "${GREEN}Audio Devices:${NC}"
-            python simple_whisper.py --list-audio-devices
+            python src/core/simple_whisper.py --list-audio-devices
             ;;
         6)
             echo -e "${GREEN}Model Loading Test:${NC}"
