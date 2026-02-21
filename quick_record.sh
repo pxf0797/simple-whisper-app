@@ -29,12 +29,13 @@ if [[ -z "$VIRTUAL_ENV" ]]; then
 fi
 
 # Default values
-MODEL="base"
+MODEL=""
 DURATION=""
 OUTPUT_AUDIO=""
 OUTPUT_TEXT=""
 DEVICE=""
 INPUT_DEVICE=""
+LANGUAGE=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -55,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             INPUT_DEVICE="$2"
             shift 2
             ;;
+        -l|--language)
+            LANGUAGE="$2"
+            shift 2
+            ;;
         -o|--output)
             OUTPUT_AUDIO="record/$2"
             OUTPUT_TEXT="record/${2%.*}_transcription.txt"
@@ -67,17 +72,20 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  -d, --duration SECONDS   Recording duration in seconds"
-            echo "  -m, --model MODEL        Model size: tiny, base, small, medium, large (default: base)"
-            echo "      --device DEVICE      Computation device: cpu, mps, cuda (default: auto)"
+            echo "  -m, --model MODEL        Model size: tiny, base, small, medium, large"
+            echo "      --device DEVICE      Computation device: cpu, mps, cuda"
             echo "      --input-device ID    Audio input device ID (use --list-devices to see IDs)"
+            echo "  -l, --language CODE      Language code: en, zh, ja, etc. (empty for auto detect)"
             echo "  -o, --output FILENAME    Base filename for output (audio and transcription)"
             echo "  -h, --help               Show this help message"
             echo ""
             echo "Examples:"
-            echo "  $0 -d 10                 Record for 10 seconds with base model"
-            echo "  $0 -d 60 -m small        Record for 60 seconds with small model"
+            echo "  $0                       Interactive selection of all options"
+            echo "  $0 -d 10 -m base         Record for 10 seconds with base model"
+            echo "  $0 -d 60 -m small -l zh  Record for 60 seconds with small model, Chinese language"
             echo "  $0 -d 300 -o meeting     Record 5 minutes, save as meeting.wav and meeting_transcription.txt"
             echo "  $0 -d 60 -m small --device mps --input-device 5  Record with GPU and specific microphone"
+            echo "  $0 -d 120 -m medium -l auto  Record 2 minutes with medium model, auto language detection"
             echo ""
             exit 0
             ;;
@@ -111,8 +119,51 @@ fi
 
 mkdir -p record
 
+# Model selection
+if [ -z "$MODEL" ]; then
+    echo -e "\n${BLUE}Model Selection:${NC}"
+    echo "  1) tiny    - Fastest, lowest accuracy"
+    echo "  2) base    - Good balance"
+    echo "  3) small   - Better accuracy"
+    echo "  4) medium  - High accuracy"
+    echo "  5) large   - Highest accuracy"
+
+    while true; do
+        read -p "Select model (1-5): " MODEL_CHOICE
+        case $MODEL_CHOICE in
+            1) MODEL="tiny"; break ;;
+            2) MODEL="base"; break ;;
+            3) MODEL="small"; break ;;
+            4) MODEL="medium"; break ;;
+            5) MODEL="large"; break ;;
+            *) echo "Please enter a number 1-5" ;;
+        esac
+    done
+fi
+
+# Language selection
+if [ -z "$LANGUAGE" ]; then
+    echo -e "\n${BLUE}Language Selection:${NC}"
+    echo "  1) auto    - Automatic language detection (recommended)"
+    echo "  2) en      - English"
+    echo "  3) zh      - Chinese"
+    echo "  4) ja      - Japanese"
+    echo "  5) other   - Enter custom language code"
+
+    read -p "Select language (1-5, default: 1): " LANG_CHOICE
+    case $LANG_CHOICE in
+        1) LANGUAGE="" ;;  # Empty for auto detection
+        2) LANGUAGE="en" ;;
+        3) LANGUAGE="zh" ;;
+        4) LANGUAGE="ja" ;;
+        5) read -p "Enter language code (e.g., 'ko', 'fr', 'de'): " LANGUAGE ;;
+        *) LANGUAGE="" ;;  # Default to auto detection
+    esac
+fi
+
 echo -e "\n${BLUE}Configuration:${NC}"
 echo "  Model: $MODEL"
+echo "  Language: ${LANGUAGE:-auto detect}"
 echo "  Audio device: ${INPUT_DEVICE:-default}"
 echo "  Computation device: ${DEVICE:-auto}"
 if [ -n "$DURATION" ]; then
@@ -175,7 +226,6 @@ else
 fi
 
 # Build command
-# Build command
 CMD="python simple_whisper.py --record --model $MODEL --output-audio $OUTPUT_AUDIO --output-text $OUTPUT_TEXT"
 
 if [ -n "$INPUT_DEVICE" ]; then
@@ -184,6 +234,10 @@ fi
 
 if [ -n "$DEVICE" ]; then
     CMD="$CMD --device $DEVICE"
+fi
+
+if [ -n "$LANGUAGE" ]; then
+    CMD="$CMD --language $LANGUAGE"
 fi
 
 if [ -n "$DURATION" ]; then
