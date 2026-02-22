@@ -9,6 +9,18 @@ Extends SimpleWhisper to add streaming capabilities with chunked processing.
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Patch pkgutil for compatibility with Python 3.12+
+# Some libraries (webrtcvad, zhconv) still use pkg_resources which depends on pkgutil.ImpImporter
+# ImpImporter was removed in Python 3.12, so we provide a dummy implementation
+import pkgutil
+if not hasattr(pkgutil, 'ImpImporter'):
+    class ImpImporter:
+        """Dummy Importer for compatibility with pkg_resources"""
+        pass
+    pkgutil.ImpImporter = ImpImporter
+
+
 import time
 import threading
 import queue
@@ -16,6 +28,23 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 import whisper
+
+# Optional import for VAD
+try:
+    import webrtcvad
+    HAS_WEBRTCVAD = True
+except ImportError:
+    webrtcvad = None
+    HAS_WEBRTCVAD = False
+
+# Optional import for zhconv (Chinese conversion)
+try:
+    import zhconv
+    HAS_ZHCONV = True
+except ImportError:
+    zhconv = None
+    HAS_ZHCONV = False
+
 from typing import Optional, Dict, List, Tuple
 from core.simple_whisper import SimpleWhisper
 
@@ -24,7 +53,9 @@ class StreamWhisper(SimpleWhisper):
     """Streaming Whisper for real-time audio transcription."""
 
     def __init__(self, model_size="base", device=None, sample_rate=16000,
-                 chunk_duration=3.0, overlap=1.0, output_audio=None):
+                 chunk_duration=3.0, overlap=1.0, output_audio=None,
+                 use_vad=True, vad_aggressiveness=3, silence_duration_ms=300,
+                 language=None, simplified_chinese=None):
         """
         Initialize the streaming Whisper model.
 
@@ -32,13 +63,24 @@ class StreamWhisper(SimpleWhisper):
             model_size (str): Whisper model size (tiny, base, small, medium, large)
             device: Device to run model on (None for auto-detection)
             sample_rate (int): Sample rate for audio recording
-            chunk_duration (float): Duration of each audio chunk in seconds
-            overlap (float): Overlap between consecutive chunks in seconds
+            chunk_duration (float): Duration of each audio chunk in seconds (used if use_vad=False)
+            overlap (float): Overlap between consecutive chunks in seconds (used if use_vad=False)
+            output_audio (str): Path to save recorded audio
+            use_vad (bool): Use Voice Activity Detection for sentence-based segmentation
+            vad_aggressiveness (int): VAD aggressiveness (0-3, 3 most aggressive)
+            silence_duration_ms (int): Minimum silence duration to consider as sentence end
+            language (str): Language code for transcription (None for auto-detection)
+            simplified_chinese (str): Convert Chinese to simplified Chinese ('yes' or 'no')
         """
         super().__init__(model_size, device, sample_rate)
 
         self.chunk_duration = chunk_duration
         self.overlap = overlap
+        self.use_vad = use_vad
+        self.vad_aggressiveness = vad_aggressiveness
+        self.silence_duration_ms = silence_duration_ms
+        self.user_language = language  # Store user-specified language
+        self.simplified_chinese = simplified_chinese  # Store simplified Chinese setting
 
         # Streaming state
         self.is_streaming = False
@@ -48,10 +90,19 @@ class StreamWhisper(SimpleWhisper):
         self.samples_per_chunk = int(chunk_duration * sample_rate)
         self.samples_overlap = int(overlap * sample_rate)
 
+        # VAD state (if use_vad=True)
+        self.vad = None
+        self.speech_buffer = []  # Buffer for current speech segment
+        self.silence_frames = 0  # Count of consecutive silent frames
+        # We'll use 30ms frames for better accuracy
+        self.frame_duration_ms = 30  # Frame duration for VAD (10, 20 or 30 ms)
+        self.samples_per_frame = int(sample_rate * self.frame_duration_ms / 1000)
+
         # Transcription context
         self.transcription_context = []
         self.last_chunk_text = ""
-        self.language = None
+        # Initialize language: use user-specified language if provided, otherwise detect
+        self.language = self.user_language
 
         # Threads
         self.audio_thread = None
@@ -61,15 +112,26 @@ class StreamWhisper(SimpleWhisper):
         self.output_audio = output_audio
         self.sf_file = None
 
-        print(f"StreamWhisper initialized: {chunk_duration}s chunks, {overlap}s overlap")
+        if use_vad:
+            if not HAS_WEBRTCVAD:
+                print(f"Warning: webrtcvad module not available (may be due to Python 3.12 compatibility). Cannot use VAD. Falling back to fixed chunk mode.")
+                print("Note: webrtcvad may require pkg_resources which is not available. You can try: pip install 'setuptools<60'")
+                self.use_vad = False
+            else:
+                try:
+                    self.vad = webrtcvad.Vad(vad_aggressiveness)
+                    print(f"StreamWhisper initialized with VAD: aggressiveness={vad_aggressiveness}, silence_threshold={silence_duration_ms}ms")
+                except Exception as e:
+                    print(f"Warning: Failed to initialize VAD: {e}. Falling back to fixed chunk mode.")
+                    self.use_vad = False
+
+        if not self.use_vad:
+            print(f"StreamWhisper initialized: {chunk_duration}s chunks, {overlap}s overlap")
 
     def _audio_callback(self, indata, frames, time_info, status):
         """Callback for audio stream."""
         if status:
             print(f"Audio stream warning: {status}")
-
-        # Add to audio buffer
-        self.audio_buffer.append(indata.copy())
 
         # Write to audio file if recording
         if self.sf_file is not None:
@@ -79,21 +141,108 @@ class StreamWhisper(SimpleWhisper):
                 print(f"Warning: Error writing audio data: {e}")
                 self.sf_file = None
 
-        # Check if we have enough data for a chunk
-        buffer_length = sum(len(chunk) for chunk in self.audio_buffer)
-        if buffer_length >= self.samples_per_chunk:
-            # Extract a chunk
-            chunk_data = self._extract_chunk_from_buffer()
-            if chunk_data is not None:
+        if self.use_vad and self.vad is not None:
+            # VAD-based sentence segmentation
+            self._process_audio_with_vad(indata.copy())
+        else:
+            # Fixed chunk size mode (original behavior)
+            # Add to audio buffer
+            self.audio_buffer.append(indata.copy())
+
+            # Check if we have enough data for a chunk
+            buffer_length = sum(len(chunk) for chunk in self.audio_buffer)
+            if buffer_length >= self.samples_per_chunk:
+                # Extract a chunk
+                chunk_data = self._extract_chunk_from_buffer()
+                if chunk_data is not None:
+                    try:
+                        self.audio_queue.put(chunk_data, block=False)
+                    except queue.Full:
+                        # Drop oldest chunk if queue is full
+                        try:
+                            self.audio_queue.get_nowait()
+                            self.audio_queue.put(chunk_data, block=False)
+                        except queue.Empty:
+                            pass
+
+    def _process_audio_with_vad(self, audio_data: np.ndarray):
+        """
+        Process audio data with Voice Activity Detection.
+
+        Args:
+            audio_data: Audio data as float32 numpy array (shape: [samples] or [samples, channels])
+        """
+        # Ensure audio data is 1D (flatten if multi-channel)
+        if audio_data.ndim > 1:
+            audio_data = audio_data.flatten()
+
+        # Convert float32 [-1.0, 1.0] to PCM16
+        pcm_data = (audio_data * 32767).astype(np.int16).tobytes()
+
+        # Process in frames (30ms each)
+        bytes_per_frame = self.samples_per_frame * 2  # 2 bytes per sample (int16)
+
+        for i in range(0, len(pcm_data), bytes_per_frame):
+            frame = pcm_data[i:i+bytes_per_frame]
+            if len(frame) < bytes_per_frame:
+                # Incomplete frame, save for next callback
+                continue
+
+            try:
+                is_speech = self.vad.is_speech(frame, self.sample_rate)
+            except Exception as e:
+                # VAD error, treat as non-speech
+                is_speech = False
+
+            if is_speech:
+                # Add audio data corresponding to this frame to speech buffer
+                frame_start = i // 2  # Convert bytes to samples
+                frame_end = frame_start + self.samples_per_frame
+                frame_audio = audio_data[frame_start:frame_end]
+                if len(frame_audio) > 0:
+                    self.speech_buffer.append(frame_audio)
+                self.silence_frames = 0
+            else:
+                # Silent frame
+                self.silence_frames += 1
+
+                # Check if silence duration exceeds threshold
+                silence_duration_ms = self.silence_frames * self.frame_duration_ms
+                if silence_duration_ms >= self.silence_duration_ms:
+                    # End of speech segment
+                    if self.speech_buffer:
+                        # Concatenate all speech frames into one chunk
+                        speech_chunk = np.concatenate(self.speech_buffer, axis=0)
+                        try:
+                            self.audio_queue.put(speech_chunk, block=False)
+                        except queue.Full:
+                            # Drop oldest chunk if queue is full
+                            try:
+                                self.audio_queue.get_nowait()
+                                self.audio_queue.put(speech_chunk, block=False)
+                            except queue.Empty:
+                                pass
+
+                        # Clear speech buffer
+                        self.speech_buffer = []
+
+        # Safety check: if speech buffer gets too long (e.g., continuous speech),
+        # force segmentation after maximum duration
+        if self.speech_buffer:
+            total_samples = sum(len(chunk) for chunk in self.speech_buffer)
+            max_duration_samples = int(self.chunk_duration * self.sample_rate)
+            if total_samples >= max_duration_samples:
+                # Force segmentation
+                speech_chunk = np.concatenate(self.speech_buffer, axis=0)
                 try:
-                    self.audio_queue.put(chunk_data, block=False)
+                    self.audio_queue.put(speech_chunk, block=False)
                 except queue.Full:
-                    # Drop oldest chunk if queue is full
                     try:
                         self.audio_queue.get_nowait()
-                        self.audio_queue.put(chunk_data, block=False)
+                        self.audio_queue.put(speech_chunk, block=False)
                     except queue.Empty:
                         pass
+                self.speech_buffer = []
 
     def _extract_chunk_from_buffer(self) -> Optional[np.ndarray]:
         """Extract a chunk from the audio buffer."""
@@ -202,6 +351,10 @@ class StreamWhisper(SimpleWhisper):
             # Process overlapping text
             chunk_result = self._handle_overlap(chunk_result)
 
+            # Apply simplified Chinese conversion if requested
+            if self.simplified_chinese == "yes" and chunk_result.get("text"):
+                chunk_result = self._apply_simplified_chinese(chunk_result)
+
             return chunk_result
 
         except Exception as e:
@@ -239,6 +392,48 @@ class StreamWhisper(SimpleWhisper):
 
         return chunk_result
 
+    def _apply_simplified_chinese(self, chunk_result: Dict) -> Dict:
+        """
+        Convert Chinese text in chunk_result to simplified Chinese.
+
+        Args:
+            chunk_result: Transcription result dictionary
+
+        Returns:
+            Updated chunk_result with converted text
+        """
+        text = chunk_result.get("text", "")
+        if not text:
+            return chunk_result
+
+        # Check if text contains Chinese characters
+        import re
+        has_chinese = re.search(r'[\u4e00-\u9fff]', text)
+
+        if not has_chinese:
+            return chunk_result
+
+        # Use global zhconv if available
+        if not HAS_ZHCONV:
+            # Only warn once per session
+            if not getattr(self, '_zhconv_warned', False):
+                print("Warning: zhconv library not available. Cannot convert to simplified Chinese.")
+                print("Install with: pip install zhconv")
+                self._zhconv_warned = True
+            return chunk_result
+
+        try:
+            converted_text = zhconv.convert(text, 'zh-cn')
+            chunk_result["text"] = converted_text
+            # Print conversion message only once
+            if not getattr(self, '_conversion_reported', False):
+                print("Converted Chinese text to simplified Chinese")
+                self._conversion_reported = True
+        except Exception as conv_e:
+            print(f"Warning: Error converting to simplified Chinese: {conv_e}")
+
+        return chunk_result
+
     def start_streaming(self, device_id=None):
         """
         Start streaming audio transcription.
@@ -261,7 +456,11 @@ class StreamWhisper(SimpleWhisper):
         self.audio_buffer = []
         self.transcription_context = []
         self.last_chunk_text = ""
-        self.language = None
+        self.language = self.user_language  # Use user-specified language if provided
+
+        # Reset VAD state
+        self.speech_buffer = []
+        self.silence_frames = 0
 
         # Clear queues
         while not self.audio_queue.empty():
@@ -319,6 +518,17 @@ class StreamWhisper(SimpleWhisper):
             return
 
         self.is_streaming = False
+
+        # Process any remaining speech in buffer before stopping
+        if self.use_vad and self.vad is not None and self.speech_buffer:
+            try:
+                speech_chunk = np.concatenate(self.speech_buffer, axis=0)
+                self.audio_queue.put(speech_chunk, block=False)
+                print(f"Processed final speech segment ({len(speech_chunk)/self.sample_rate:.2f}s)")
+            except Exception as e:
+                print(f"Warning: Could not process final speech segment: {e}")
+            finally:
+                self.speech_buffer = []
 
         # Stop audio stream
         if hasattr(self, 'stream'):
@@ -427,6 +637,16 @@ def main():
                        help="Overlap between chunks in seconds")
     parser.add_argument("--duration", type=float, default=30.0,
                        help="Test duration in seconds")
+    parser.add_argument("--no-vad", action="store_true",
+                       help="Disable Voice Activity Detection (use fixed chunks)")
+    parser.add_argument("--vad-aggressiveness", type=int, default=3, choices=[0, 1, 2, 3],
+                       help="VAD aggressiveness (0=least, 3=most aggressive)")
+    parser.add_argument("--silence-duration-ms", type=int, default=300,
+                       help="Minimum silence duration to end a sentence (milliseconds)")
+    parser.add_argument("--language", type=str,
+                       help="Language code for transcription (e.g., 'en', 'zh'). Auto-detected if not specified.")
+    parser.add_argument("--simplified-chinese", type=str, choices=["yes", "no"],
+                       help="Convert Chinese text to simplified Chinese (yes/no).")
 
     args = parser.parse_args()
 
@@ -435,7 +655,12 @@ def main():
         model_size=args.model,
         device=args.device,
         chunk_duration=args.chunk_duration,
-        overlap=args.overlap
+        overlap=args.overlap,
+        use_vad=not args.no_vad,
+        vad_aggressiveness=args.vad_aggressiveness,
+        silence_duration_ms=args.silence_duration_ms,
+        language=args.language,
+        simplified_chinese=args.simplified_chinese
     )
 
     print(f"Starting streaming for {args.duration} seconds...")

@@ -17,13 +17,7 @@ import whisper
 from pathlib import Path
 from datetime import datetime
 
-# Try to import streaming module (optional)
-try:
-    from streaming.stream_whisper import StreamWhisper
-    HAS_STREAM = True
-except ImportError:
-    HAS_STREAM = False
-    StreamWhisper = None
+# Streaming module is imported dynamically when needed
 
 
 def list_audio_devices():
@@ -373,6 +367,12 @@ def main():
                        help="Chunk duration in seconds for streaming (default: 3.0)")
     parser.add_argument("--overlap", type=float, default=1.0,
                        help="Overlap between chunks in seconds for streaming (default: 1.0)")
+    parser.add_argument("--no-vad", action="store_true",
+                       help="Disable Voice Activity Detection for streaming (use fixed chunks)")
+    parser.add_argument("--vad-aggressiveness", type=int, default=3, choices=[0, 1, 2, 3],
+                       help="VAD aggressiveness for streaming (0=least, 3=most aggressive, default: 3)")
+    parser.add_argument("--silence-duration-ms", type=int, default=300,
+                       help="Minimum silence duration to end a sentence in milliseconds (default: 300)")
     parser.add_argument("--list-audio-devices", action="store_true",
                        help="List available audio input devices and exit.")
 
@@ -422,9 +422,13 @@ def main():
 
     elif args.stream:
         # Streaming mode
-        if not HAS_STREAM:
+        try:
+            from streaming.stream_whisper import StreamWhisper
+        except Exception as e:
             print("Error: Streaming module not available.")
-            print("Make sure stream_whisper.py is in the same directory.")
+            print(f"Failed to import stream_whisper: {e}")
+            print("Make sure stream_whisper.py is in the src/streaming directory.")
+            print("If missing webrtcvad, install with: pip install webrtcvad")
             return
 
         print("\n" + "="*50)
@@ -437,7 +441,12 @@ def main():
             device=args.device,
             chunk_duration=args.chunk_duration,
             overlap=args.overlap,
-            output_audio=args.output_audio
+            output_audio=args.output_audio,
+            use_vad=not args.no_vad,
+            vad_aggressiveness=args.vad_aggressiveness,
+            silence_duration_ms=args.silence_duration_ms,
+            language=args.language,
+            simplified_chinese=args.simplified_chinese
         )
 
         # Start streaming

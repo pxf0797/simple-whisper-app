@@ -13,3 +13,6 @@ scipy
 
 # Chinese text conversion (optional)
 zhconv
+
+# Voice Activity Detection for streaming
+webrtcvad

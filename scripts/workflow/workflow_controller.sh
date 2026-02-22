@@ -667,6 +667,9 @@ execute_live_streaming() {
     local CHUNK_DUR_ARG=""
     local OVERLAP_ARG=""
     local SIMPLIFIED_CHINESE_ARG=""
+    local NO_VAD_ARG=""
+    local VAD_AGGRESSIVENESS_ARG=""
+    local SILENCE_DURATION_MS_ARG=""
     local AUTO_START=false
 
     while [[ $# -gt 0 ]]; do
@@ -707,6 +710,18 @@ execute_live_streaming() {
                 SIMPLIFIED_CHINESE_ARG="$2"
                 shift 2
                 ;;
+            --no-vad)
+                NO_VAD_ARG="true"
+                shift
+                ;;
+            --vad-aggressiveness)
+                VAD_AGGRESSIVENESS_ARG="$2"
+                shift 2
+                ;;
+            --silence-duration-ms)
+                SILENCE_DURATION_MS_ARG="$2"
+                shift 2
+                ;;
             --auto-start)
                 AUTO_START=true
                 shift
@@ -722,9 +737,9 @@ execute_live_streaming() {
     echo ""
 
     # Check for streaming module
-    if [ ! -f "stream_whisper.py" ]; then
+    if [ ! -f "$PROJECT_ROOT/src/streaming/stream_whisper.py" ]; then
         echo -e "${RED}Streaming module not found${NC}"
-        echo -e "${YELLOW}Streaming features require stream_whisper.py${NC}"
+        echo -e "${YELLOW}Streaming features require $PROJECT_ROOT/src/streaming/stream_whisper.py${NC}"
         echo "You can use simple_whisper.py with --stream flag instead."
         echo ""
         read -p "Use simple_whisper.py with --stream? (y/n): " STREAM_RESPONSE
@@ -763,6 +778,11 @@ execute_live_streaming() {
         CONFIG_MODE=${CONFIG_MODE:-1}
     fi
 
+    # VAD configuration defaults
+    NO_VAD=""
+    VAD_AGGRESSIVENESS="3"
+    SILENCE_DURATION_MS="300"
+
     # Streaming configuration
     echo -e "${BLUE}Streaming Configuration:${NC}"
 
@@ -776,6 +796,10 @@ execute_live_streaming() {
             DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
+            # VAD enabled by default
+            NO_VAD=""
+            VAD_AGGRESSIVENESS="3"
+            SILENCE_DURATION_MS="300"
             ;;
         2)
             # Standard setup - balanced performance
@@ -786,6 +810,10 @@ execute_live_streaming() {
             DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
+            # VAD enabled by default
+            NO_VAD=""
+            VAD_AGGRESSIVENESS="3"
+            SILENCE_DURATION_MS="300"
             ;;
         3)
             # High quality setup - maximum accuracy
@@ -796,6 +824,10 @@ execute_live_streaming() {
             DURATION=30
             CHUNK_DUR=5.0
             OVERLAP=2.0
+            # VAD enabled by default
+            NO_VAD=""
+            VAD_AGGRESSIVENESS="3"
+            SILENCE_DURATION_MS="300"
             ;;
         4)
             # Custom setup - interactive selection
@@ -834,6 +866,20 @@ execute_live_streaming() {
 
             read -p "Overlap in seconds (default: 1.0): " OVERLAP
             OVERLAP=${OVERLAP:-1.0}
+
+            # VAD configuration
+            echo -e "${BLUE}Voice Activity Detection (VAD) Configuration:${NC}"
+            read -p "Enable VAD for sentence-based segmentation? (y/n, default: y): " ENABLE_VAD
+            ENABLE_VAD=$(echo "$ENABLE_VAD" | tr -d '[:space:]')
+            if [[ "$ENABLE_VAD" =~ ^[Nn]$ ]]; then
+                NO_VAD="true"
+            else
+                NO_VAD=""
+                read -p "VAD aggressiveness (0-3, 3 most aggressive, default: 3): " VAD_AGGRESSIVENESS
+                VAD_AGGRESSIVENESS=${VAD_AGGRESSIVENESS:-3}
+                read -p "Silence duration to end sentence (ms, default: 300): " SILENCE_DURATION_MS
+                SILENCE_DURATION_MS=${SILENCE_DURATION_MS:-300}
+            fi
             ;;
         *)
             # Default to quick setup
@@ -879,6 +925,18 @@ execute_live_streaming() {
     if [ -n "$INPUT_DEVICE_ARG" ]; then
         INPUT_DEVICE="$INPUT_DEVICE_ARG"
         echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
+    fi
+    if [ -n "$NO_VAD_ARG" ]; then
+        NO_VAD="$NO_VAD_ARG"
+        echo -e "${GREEN}Overriding VAD: disabled${NC}"
+    fi
+    if [ -n "$VAD_AGGRESSIVENESS_ARG" ]; then
+        VAD_AGGRESSIVENESS="$VAD_AGGRESSIVENESS_ARG"
+        echo -e "${GREEN}Overriding VAD aggressiveness to: $VAD_AGGRESSIVENESS${NC}"
+    fi
+    if [ -n "$SILENCE_DURATION_MS_ARG" ]; then
+        SILENCE_DURATION_MS="$SILENCE_DURATION_MS_ARG"
+        echo -e "${GREEN}Overriding silence duration to: $SILENCE_DURATION_MS ms${NC}"
     fi
 
     # Computation device selection (if not specified via command line)
@@ -940,6 +998,17 @@ except:
         CMD="$CMD --device $DEVICE"
     fi
 
+    # Add VAD parameters if specified
+    if [ -n "$NO_VAD" ]; then
+        CMD="$CMD --no-vad"
+    fi
+    if [ -n "$VAD_AGGRESSIVENESS" ] && [ -z "$NO_VAD" ]; then
+        CMD="$CMD --vad-aggressiveness $VAD_AGGRESSIVENESS"
+    fi
+    if [ -n "$SILENCE_DURATION_MS" ] && [ -z "$NO_VAD" ]; then
+        CMD="$CMD --silence-duration-ms $SILENCE_DURATION_MS"
+    fi
+
     echo -e "\n${GREEN}Streaming configuration:${NC}"
     echo "  Model: $MODEL"
 
@@ -963,6 +1032,15 @@ except:
                 echo "  Simplified Chinese: no"
             fi
         fi
+    fi
+
+    # Show VAD configuration
+    if [ -n "$NO_VAD" ]; then
+        echo "  VAD: disabled (using fixed chunks)"
+    else
+        echo "  VAD: enabled"
+        echo "  VAD aggressiveness: $VAD_AGGRESSIVENESS"
+        echo "  Silence threshold: $SILENCE_DURATION_MS ms"
     fi
 
     echo "  Audio device: ${INPUT_DEVICE:-default}"
@@ -1267,6 +1345,9 @@ show_help() {
     echo "  --input-device ID Audio input device ID"
     echo "  --device TYPE   Computation device: cpu, mps, cuda"
     echo "  --simplified-chinese yes/no Convert Chinese to simplified"
+    echo "  --no-vad        Disable Voice Activity Detection for streaming"
+    echo "  --vad-aggressiveness N VAD aggressiveness (0-3, 3 most aggressive)"
+    echo "  --silence-duration-ms MS Minimum silence to end sentence (milliseconds)"
     echo "  --auto-start    Skip confirmation and start immediately"
     echo ""
     echo "Examples:"
