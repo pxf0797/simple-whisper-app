@@ -54,8 +54,8 @@ class StreamWhisper(SimpleWhisper):
 
     def __init__(self, model_size="base", device=None, sample_rate=16000,
                  chunk_duration=3.0, overlap=1.0, output_audio=None,
-                 use_vad=True, vad_aggressiveness=3, silence_duration_ms=300,
-                 language=None, simplified_chinese=None):
+                 output_text=None, use_vad=True, vad_aggressiveness=3,
+                 silence_duration_ms=300, language=None, simplified_chinese=None):
         """
         Initialize the streaming Whisper model.
 
@@ -101,6 +101,7 @@ class StreamWhisper(SimpleWhisper):
         # Transcription context
         self.transcription_context = []
         self.last_chunk_text = ""
+        self.full_transcription_text = ""
         # Initialize language: use user-specified language if provided, otherwise detect
         self.language = self.user_language
 
@@ -111,6 +112,10 @@ class StreamWhisper(SimpleWhisper):
         # Audio recording
         self.output_audio = output_audio
         self.sf_file = None
+
+        # Text output
+        self.output_text = output_text
+        self.text_file = None
 
         if use_vad:
             if not HAS_WEBRTCVAD:
@@ -495,6 +500,15 @@ class StreamWhisper(SimpleWhisper):
                     print(f"Warning: Could not open audio file for recording: {e}")
                     self.sf_file = None
 
+            # Open text file for transcription if output_text is specified
+            if self.output_text:
+                try:
+                    self.text_file = open(self.output_text, 'w', encoding='utf-8')
+                    print(f"Transcription saving to: {self.output_text}")
+                except Exception as e:
+                    print(f"Warning: Could not open text file for writing: {e}")
+                    self.text_file = None
+
             self.stream.start()
             print(f"Audio streaming started on device {valid_device_id or 'default'}")
 
@@ -561,14 +575,33 @@ class StreamWhisper(SimpleWhisper):
             finally:
                 self.sf_file = None
 
+        # Close text file if writing
+        if self.text_file is not None:
+            try:
+                # Save full transcription summary if we have content
+                if self.full_transcription_text.strip():
+                    # Write a separator and the complete transcription
+                    self.text_file.write("\n" + "="*60 + "\n")
+                    self.text_file.write("COMPLETE TRANSCRIPTION:\n")
+                    self.text_file.write("="*60 + "\n")
+                    self.text_file.write(self.full_transcription_text.strip() + "\n")
+
+                self.text_file.close()
+                print(f"Transcription saved to: {self.output_text}")
+            except Exception as e:
+                print(f"Warning: Error closing text file: {e}")
+            finally:
+                self.text_file = None
+
         print("Streaming stopped")
 
-    def get_transcription(self, timeout: float = 0.1) -> Optional[str]:
+    def get_transcription(self, timeout: float = 0.1, start_time: float = None) -> Optional[str]:
         """
         Get latest transcription result.
 
         Args:
             timeout: Time to wait for result
+            start_time: Optional start time for timestamping
 
         Returns:
             Transcription text or None if no new result
@@ -576,6 +609,7 @@ class StreamWhisper(SimpleWhisper):
         try:
             result = self.result_queue.get(timeout=timeout)
             if result and result.get("text"):
+                text = result["text"]
                 # Add to context
                 self.transcription_context.append(result)
 
@@ -583,7 +617,24 @@ class StreamWhisper(SimpleWhisper):
                 if len(self.transcription_context) > 50:
                     self.transcription_context = self.transcription_context[-50:]
 
-                return result["text"]
+                # Add to full transcription text
+                if text:
+                    self.full_transcription_text += text + " "
+
+                # Write to text file if available
+                if self.text_file is not None and text:
+                    try:
+                        timestamp = result.get("timestamp")
+                        if timestamp is not None and start_time is not None:
+                            rel_time = timestamp - start_time
+                            self.text_file.write(f"[{rel_time:.1f}s] {text}\n")
+                        else:
+                            self.text_file.write(f"{text}\n")
+                        self.text_file.flush()
+                    except Exception as e:
+                        print(f"Warning: Error writing to text file: {e}")
+
+                return text
         except queue.Empty:
             pass
 
@@ -647,6 +698,10 @@ def main():
                        help="Language code for transcription (e.g., 'en', 'zh'). Auto-detected if not specified.")
     parser.add_argument("--simplified-chinese", type=str, choices=["yes", "no"],
                        help="Convert Chinese text to simplified Chinese (yes/no).")
+    parser.add_argument("--output-audio", type=str,
+                       help="Path to save recorded audio file")
+    parser.add_argument("--output-text", type=str,
+                       help="Path to save transcription text file")
 
     args = parser.parse_args()
 
@@ -656,6 +711,8 @@ def main():
         device=args.device,
         chunk_duration=args.chunk_duration,
         overlap=args.overlap,
+        output_audio=args.output_audio,
+        output_text=args.output_text,
         use_vad=not args.no_vad,
         vad_aggressiveness=args.vad_aggressiveness,
         silence_duration_ms=args.silence_duration_ms,
@@ -675,7 +732,7 @@ def main():
             if args.duration > 0:
                 # Run with time limit
                 while time.time() - start_time < args.duration:
-                    text = streamer.get_transcription(timeout=0.5)
+                    text = streamer.get_transcription(timeout=0.5, start_time=start_time)
                     if text:
                         print(f"[{time.time() - start_time:.1f}s] {text}")
 
@@ -686,7 +743,7 @@ def main():
             else:
                 # Run indefinitely until interrupted
                 while True:
-                    text = streamer.get_transcription(timeout=0.5)
+                    text = streamer.get_transcription(timeout=0.5, start_time=start_time)
                     if text:
                         print(f"[{time.time() - start_time:.1f}s] {text}")
 

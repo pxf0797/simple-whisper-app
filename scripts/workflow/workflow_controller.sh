@@ -64,13 +64,114 @@ check_environment() {
         fi
     fi
 
-    # Quick dependency check
-    log_message "INFO" "Checking core dependencies..."
-    python3 -c "import whisper, sounddevice, soundfile" 2>/dev/null && {
+    echo -e "${BLUE}=== Dependency Check ===${NC}"
+
+    # Core dependencies (required for basic functionality)
+    echo -e "${CYAN}Checking core dependencies...${NC}"
+    local core_missing=0
+    if python3 -c "import whisper" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ whisper${NC}"
+    else
+        echo -e "  ${RED}✗ whisper${NC} (required)"
+        core_missing=1
+    fi
+
+    if python3 -c "import sounddevice" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ sounddevice${NC}"
+    else
+        echo -e "  ${RED}✗ sounddevice${NC} (required)"
+        core_missing=1
+    fi
+
+    if python3 -c "import soundfile" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ soundfile${NC}"
+    else
+        echo -e "  ${RED}✗ soundfile${NC} (required)"
+        core_missing=1
+    fi
+
+    # Torch/GPU support
+    echo -e "${CYAN}Checking PyTorch and compute environment...${NC}"
+    if python3 -c "import torch" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ PyTorch${NC}"
+        # Check compute device availability
+        if python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())" 2>/dev/null | grep -q "CUDA available: True"; then
+            echo -e "  ${GREEN}✓ CUDA GPU support${NC}"
+        elif python3 -c "import torch; has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available(); print('MPS available:', has_mps)" 2>/dev/null | grep -q "MPS available: True"; then
+            echo -e "  ${GREEN}✓ Apple Silicon (MPS) support${NC}"
+        else
+            echo -e "  ${YELLOW}⚠ No GPU acceleration (CPU only)${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠ PyTorch not found (required for whisper)${NC}"
+    fi
+
+    # Optional dependencies
+    echo -e "${CYAN}Checking optional dependencies...${NC}"
+    if python3 -c "import zhconv" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ zhconv${NC} (Chinese simplified/traditional conversion)"
+    else
+        echo -e "  ${YELLOW}⚠ zhconv${NC} (optional: Chinese conversion)"
+        echo -e "    Install: ${CYAN}pip install zhconv${NC}"
+    fi
+
+    if python3 -c "import webrtcvad" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ webrtcvad${NC} (Voice Activity Detection)"
+    else
+        echo -e "  ${YELLOW}⚠ webrtcvad${NC} (optional: sentence-based VAD)"
+        echo -e "    Install: ${CYAN}pip install webrtcvad${NC}"
+        echo -e "    Note: For Python 3.12+, may need: ${CYAN}pip install 'setuptools<60'${NC}"
+    fi
+
+    # Audio devices
+    echo -e "${CYAN}Checking audio devices...${NC}"
+    if python3 -c "import sounddevice as sd; devices = sd.query_devices(); print('Audio devices available')" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ Audio system accessible${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ Audio system may have issues${NC}"
+    fi
+
+    # Summary
+    if [ $core_missing -eq 0 ]; then
+        echo -e "${GREEN}✓ All core dependencies are installed${NC}"
         log_message "INFO" "All core dependencies are installed"
-    } || {
-        log_message "WARN" "Some dependencies missing. Continuing anyway..."
-    }
+    else
+        echo -e "${YELLOW}⚠ Some core dependencies are missing${NC}"
+        echo -e "${YELLOW}  Basic functionality may be limited${NC}"
+        log_message "WARN" "Some core dependencies missing"
+    fi
+
+    echo -e "${BLUE}=== End Dependency Check ===${NC}"
+    echo ""
+}
+
+# Function to check if a Python module is available
+check_python_module() {
+    local module_name="$1"
+    local description="$2"
+    local required="$3"  # "required" or "optional"
+
+    if python3 -c "import $module_name" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ $module_name${NC}"
+        if [ -n "$description" ]; then
+            echo -e "    ($description)"
+        fi
+        return 0
+    else
+        if [ "$required" = "required" ]; then
+            echo -e "  ${RED}✗ $module_name${NC} (required)"
+            if [ -n "$description" ]; then
+                echo -e "    ($description)"
+            fi
+            return 1
+        else
+            echo -e "  ${YELLOW}⚠ $module_name${NC} (optional)"
+            if [ -n "$description" ]; then
+                echo -e "    ($description)"
+            fi
+            return 0
+        fi
+    fi
 }
 
 # Function to check VAD compatibility and provide installation guidance
@@ -80,6 +181,7 @@ check_vad_compatibility() {
     # Check if webrtcvad is importable
     if python3 -c "import webrtcvad" 2>/dev/null; then
         echo -e "${GREEN}✓ webrtcvad is available${NC}"
+        VAD_AVAILABLE=1
         return 0
     else
         echo -e "${YELLOW}⚠ webrtcvad is not available${NC}"
@@ -101,6 +203,7 @@ check_vad_compatibility() {
             echo "You can install webrtcvad manually and try again."
             return 1
         fi
+        VAD_AVAILABLE=0
         return 0
     fi
 }
@@ -603,6 +706,27 @@ except:
 
     mkdir -p "$PROJECT_ROOT/record"
 
+    # Check zhconv dependency if simplified Chinese conversion is requested
+    if [ "$SIMPLIFIED_CHINESE" = "yes" ]; then
+        if [[ "$LANGUAGE" == *zh* ]] || [[ "$LANGUAGE" == multi:* ]] && [[ "$LANGUAGE" == *zh* ]]; then
+            if ! python3 -c "import zhconv" 2>/dev/null; then
+                echo -e "${YELLOW}Warning: zhconv library not found${NC}"
+                echo -e "${YELLOW}Simplified Chinese conversion requires zhconv module${NC}"
+                echo -e "${CYAN}Install with: pip install zhconv${NC}"
+                read -p "Continue without simplified Chinese conversion? (y/n, default: y): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    echo -e "${YELLOW}Cancelling...${NC}"
+                    return
+                else
+                    # Disable simplified Chinese conversion
+                    SIMPLIFIED_CHINESE="no"
+                    echo -e "${YELLOW}Simplified Chinese conversion disabled${NC}"
+                fi
+            fi
+        fi
+    fi
+
     # Build command
     CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record --model $MODEL --output-audio \"$AUDIO_FILE\" --output-text \"$TEXT_FILE\""
 
@@ -831,10 +955,16 @@ execute_live_streaming() {
             MODEL="tiny"
             CHUNK_DUR=3.0
             OVERLAP=1.0
-            # VAD enabled by default
-            NO_VAD=""
-            VAD_AGGRESSIVENESS="3"
-            SILENCE_DURATION_MS="300"
+            # VAD configuration based on availability
+            if [ "${VAD_AVAILABLE:-0}" -eq 1 ]; then
+                NO_VAD=""
+                VAD_AGGRESSIVENESS="3"
+                SILENCE_DURATION_MS="300"
+            else
+                NO_VAD="true"
+                VAD_AGGRESSIVENESS=""
+                SILENCE_DURATION_MS=""
+            fi
 
             # Language selection (optional)
             echo -e "${BLUE}Language Configuration:${NC}"
@@ -902,10 +1032,16 @@ except:
             MODEL="base"
             CHUNK_DUR=3.0
             OVERLAP=1.0
-            # VAD enabled by default
-            NO_VAD=""
-            VAD_AGGRESSIVENESS="3"
-            SILENCE_DURATION_MS="300"
+            # VAD configuration based on availability
+            if [ "${VAD_AVAILABLE:-0}" -eq 1 ]; then
+                NO_VAD=""
+                VAD_AGGRESSIVENESS="3"
+                SILENCE_DURATION_MS="300"
+            else
+                NO_VAD="true"
+                VAD_AGGRESSIVENESS=""
+                SILENCE_DURATION_MS=""
+            fi
 
             # Language selection (optional)
             echo -e "${BLUE}Language Configuration:${NC}"
@@ -973,10 +1109,16 @@ except:
             MODEL="medium"
             CHUNK_DUR=5.0
             OVERLAP=2.0
-            # VAD enabled by default
-            NO_VAD=""
-            VAD_AGGRESSIVENESS="3"
-            SILENCE_DURATION_MS="300"
+            # VAD configuration based on availability
+            if [ "${VAD_AVAILABLE:-0}" -eq 1 ]; then
+                NO_VAD=""
+                VAD_AGGRESSIVENESS="3"
+                SILENCE_DURATION_MS="300"
+            else
+                NO_VAD="true"
+                VAD_AGGRESSIVENESS=""
+                SILENCE_DURATION_MS=""
+            fi
 
             # Language selection (optional)
             echo -e "${BLUE}Language Configuration:${NC}"
@@ -1087,16 +1229,27 @@ except:
 
             # VAD configuration
             echo -e "${BLUE}Voice Activity Detection (VAD) Configuration:${NC}"
-            read -p "Enable VAD for sentence-based segmentation? (y/n, default: y): " ENABLE_VAD
-            ENABLE_VAD=$(echo "$ENABLE_VAD" | tr -d '[:space:]')
-            if [[ "$ENABLE_VAD" =~ ^[Nn]$ ]]; then
-                NO_VAD="true"
+
+            if [ "${VAD_AVAILABLE:-0}" -eq 1 ]; then
+                # VAD is available
+                read -p "Enable VAD for sentence-based segmentation? (y/n, default: y): " ENABLE_VAD
+                ENABLE_VAD=$(echo "$ENABLE_VAD" | tr -d '[:space:]')
+                if [[ "$ENABLE_VAD" =~ ^[Nn]$ ]]; then
+                    NO_VAD="true"
+                else
+                    NO_VAD=""
+                    read -p "VAD aggressiveness (0-3, 3 most aggressive, default: 3): " VAD_AGGRESSIVENESS
+                    VAD_AGGRESSIVENESS=${VAD_AGGRESSIVENESS:-3}
+                    read -p "Silence duration to end sentence (ms, default: 300): " SILENCE_DURATION_MS
+                    SILENCE_DURATION_MS=${SILENCE_DURATION_MS:-300}
+                fi
             else
-                NO_VAD=""
-                read -p "VAD aggressiveness (0-3, 3 most aggressive, default: 3): " VAD_AGGRESSIVENESS
-                VAD_AGGRESSIVENESS=${VAD_AGGRESSIVENESS:-3}
-                read -p "Silence duration to end sentence (ms, default: 300): " SILENCE_DURATION_MS
-                SILENCE_DURATION_MS=${SILENCE_DURATION_MS:-300}
+                # VAD is not available
+                echo -e "${YELLOW}VAD is not available (webrtcvad module missing)${NC}"
+                echo -e "${YELLOW}Using fixed chunk mode instead of sentence-based segmentation${NC}"
+                NO_VAD="true"
+                VAD_AGGRESSIVENESS=""
+                SILENCE_DURATION_MS=""
             fi
             ;;
         *)
@@ -1108,6 +1261,16 @@ except:
             DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
+            # VAD configuration based on availability
+            if [ "${VAD_AVAILABLE:-0}" -eq 1 ]; then
+                NO_VAD=""
+                VAD_AGGRESSIVENESS="3"
+                SILENCE_DURATION_MS="300"
+            else
+                NO_VAD="true"
+                VAD_AGGRESSIVENESS=""
+                SILENCE_DURATION_MS=""
+            fi
             ;;
     esac
 
@@ -1169,10 +1332,31 @@ except:
 
     mkdir -p "$PROJECT_ROOT/record"
 
+    # Check zhconv dependency if simplified Chinese conversion is requested
+    if [ "$SIMPLIFIED_CHINESE" = "yes" ]; then
+        if [[ "$LANGUAGE" == *zh* ]] || [[ "$LANGUAGE" == multi:* ]] && [[ "$LANGUAGE" == *zh* ]]; then
+            if ! python3 -c "import zhconv" 2>/dev/null; then
+                echo -e "${YELLOW}Warning: zhconv library not found${NC}"
+                echo -e "${YELLOW}Simplified Chinese conversion requires zhconv module${NC}"
+                echo -e "${CYAN}Install with: pip install zhconv${NC}"
+                read -p "Continue without simplified Chinese conversion? (y/n, default: y): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    echo -e "${YELLOW}Cancelling...${NC}"
+                    return
+                else
+                    # Disable simplified Chinese conversion
+                    SIMPLIFIED_CHINESE="no"
+                    echo -e "${YELLOW}Simplified Chinese conversion disabled${NC}"
+                fi
+            fi
+        fi
+    fi
+
     if [ "$USE_SIMPLE_STREAM" = true ]; then
         CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --stream --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP --output-text \"$TEXT_FILE\" --output-audio \"$AUDIO_FILE\""
     else
-        CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+        CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP --output-audio \"$AUDIO_FILE\" --output-text \"$TEXT_FILE\""
     fi
 
     # Add language parameters if specified
@@ -1244,10 +1428,8 @@ except:
     echo "  Duration: $DURATION seconds"
     echo "  Chunk duration: $CHUNK_DUR seconds"
     echo "  Overlap: $OVERLAP seconds"
-    if [ "$USE_SIMPLE_STREAM" = true ]; then
-        echo "  Text output: $TEXT_FILE"
-        echo "  Audio output: $AUDIO_FILE"
-    fi
+    echo "  Text output: $TEXT_FILE"
+    echo "  Audio output: $AUDIO_FILE"
     echo "  Command: $CMD"
     echo ""
 
