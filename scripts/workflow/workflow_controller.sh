@@ -73,6 +73,38 @@ check_environment() {
     }
 }
 
+# Function to check VAD compatibility and provide installation guidance
+check_vad_compatibility() {
+    echo -e "${BLUE}Checking Voice Activity Detection (VAD) compatibility...${NC}"
+
+    # Check if webrtcvad is importable
+    if python3 -c "import webrtcvad" 2>/dev/null; then
+        echo -e "${GREEN}✓ webrtcvad is available${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠ webrtcvad is not available${NC}"
+        echo ""
+        echo "Voice Activity Detection (VAD) is required for sentence-based transcription."
+        echo "Without VAD, the system will use fixed chunk mode instead of sentence-based segmentation."
+        echo ""
+        echo "Possible solutions:"
+        echo "1. Install webrtcvad (may require setuptools<60 for Python 3.12+):"
+        echo "   pip install 'setuptools<60'"
+        echo "   pip install webrtcvad"
+        echo ""
+        echo "2. Or disable VAD and use fixed chunk mode (less accurate for sentence detection)"
+        echo ""
+
+        read -p "Continue without VAD? (y/n, default: y): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo "You can install webrtcvad manually and try again."
+            return 1
+        fi
+        return 0
+    fi
+}
+
 # Function to select workflow
 select_workflow() {
     echo -e "${CYAN}Select Workflow:${NC}"
@@ -657,6 +689,12 @@ except:
 execute_live_streaming() {
     log_message "INFO" "Starting Live Streaming workflow"
 
+    # Check VAD compatibility
+    if ! check_vad_compatibility; then
+        echo -e "${YELLOW}VAD check failed. Exiting streaming workflow.${NC}"
+        return 1
+    fi
+
     # Parse command line arguments for this workflow
     local PRESET=""
     local MODEL_OVERRIDE=""
@@ -791,7 +829,6 @@ execute_live_streaming() {
             # Quick setup - fast model, auto language, default device
             echo -e "${GREEN}Using quick setup (fast model, auto language)${NC}"
             MODEL="tiny"
-            DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
             # VAD enabled by default
@@ -820,6 +857,22 @@ execute_live_streaming() {
             else
                 LANGUAGE=""
                 SIMPLIFIED_CHINESE=""
+            fi
+
+            # Recording duration selection
+            echo -e "${BLUE}Recording Duration:${NC}"
+            echo "Enter duration in seconds (0 for unlimited, press Enter for 300 seconds):"
+            read -p "Duration: " DURATION_INPUT
+            DURATION_INPUT=$(echo "$DURATION_INPUT" | tr -d '[:space:]')
+            if [ -z "$DURATION_INPUT" ]; then
+                # Empty input - use 300 seconds (5 minutes) as default
+                DURATION=300
+            elif [ "$DURATION_INPUT" = "0" ]; then
+                # 0 means unlimited
+                DURATION=0
+            else
+                # Use the number provided
+                DURATION="$DURATION_INPUT"
             fi
 
             # Audio device selection (optional)
@@ -847,7 +900,6 @@ except:
             # Standard setup - balanced performance
             echo -e "${GREEN}Using standard setup (balanced performance)${NC}"
             MODEL="base"
-            DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
             # VAD enabled by default
@@ -878,6 +930,22 @@ except:
                 SIMPLIFIED_CHINESE=""
             fi
 
+            # Recording duration selection
+            echo -e "${BLUE}Recording Duration:${NC}"
+            echo "Enter duration in seconds (0 for unlimited, press Enter for 300 seconds):"
+            read -p "Duration: " DURATION_INPUT
+            DURATION_INPUT=$(echo "$DURATION_INPUT" | tr -d '[:space:]')
+            if [ -z "$DURATION_INPUT" ]; then
+                # Empty input - use 300 seconds (5 minutes) as default
+                DURATION=300
+            elif [ "$DURATION_INPUT" = "0" ]; then
+                # 0 means unlimited
+                DURATION=0
+            else
+                # Use the number provided
+                DURATION="$DURATION_INPUT"
+            fi
+
             # Audio device selection (optional)
             echo -e "${BLUE}Audio Device Configuration:${NC}"
             read -p "Use default audio device? (y/n, default: y): " DEFAULT_AUDIO
@@ -903,7 +971,6 @@ except:
             # High quality setup - maximum accuracy
             echo -e "${GREEN}Using high quality setup (maximum accuracy)${NC}"
             MODEL="medium"
-            DURATION=30
             CHUNK_DUR=5.0
             OVERLAP=2.0
             # VAD enabled by default
@@ -932,6 +999,22 @@ except:
             else
                 LANGUAGE=""
                 SIMPLIFIED_CHINESE=""
+            fi
+
+            # Recording duration selection
+            echo -e "${BLUE}Recording Duration:${NC}"
+            echo "Enter duration in seconds (0 for unlimited, press Enter for 300 seconds):"
+            read -p "Duration: " DURATION_INPUT
+            DURATION_INPUT=$(echo "$DURATION_INPUT" | tr -d '[:space:]')
+            if [ -z "$DURATION_INPUT" ]; then
+                # Empty input - use 300 seconds (5 minutes) as default
+                DURATION=300
+            elif [ "$DURATION_INPUT" = "0" ]; then
+                # 0 means unlimited
+                DURATION=0
+            else
+                # Use the number provided
+                DURATION="$DURATION_INPUT"
             fi
 
             # Audio device selection (optional)
