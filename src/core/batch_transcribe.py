@@ -64,8 +64,27 @@ def transcribe_file(app, audio_file, output_dir, language=None):
 
         return saved_path
 
+    except FileNotFoundError as e:
+        print(f"  ✗ Error: File not found: {audio_file}")
+        print(f"  Details: {e}")
+        return None
+    except PermissionError as e:
+        print(f"  ✗ Error: Permission denied accessing file: {audio_file}")
+        print(f"  Details: {e}")
+        return None
+    except RuntimeError as e:
+        print(f"  ✗ Error: Runtime error processing {audio_file}")
+        if "memory" in str(e).lower():
+            print(f"  Memory error. Try processing fewer files at once.")
+        print(f"  Details: {e}")
+        return None
+    except OSError as e:
+        print(f"  ✗ Error: System error processing {audio_file}")
+        print(f"  Details: {e}")
+        return None
     except Exception as e:
-        print(f"  ✗ Error processing {audio_file}: {e}")
+        print(f"  ✗ Unexpected error processing {audio_file}: {e}")
+        print(f"  Please check the file format and try again.")
         return None
 
 
@@ -134,8 +153,38 @@ def main():
     print(f"\nInitializing Whisper model '{args.model}'...")
     try:
         app = SimpleWhisper(model_size=args.model, device=args.device)
+    except FileNotFoundError as e:
+        print(f"Error: Model file not found for '{args.model}'.")
+        print("The model may need to be downloaded. Whisper will download it automatically on first use.")
+        print(f"Details: {e}")
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"Error: Runtime error loading model '{args.model}'.")
+        if "CUDA" in str(e):
+            print("CUDA/GPU error. Check your CUDA installation and GPU availability.")
+        elif "MPS" in str(e):
+            print("MPS (Apple Silicon) error. Check your PyTorch MPS support.")
+        print(f"Details: {e}")
+        sys.exit(1)
+    except ConnectionError as e:
+        print(f"Error: Network connection failed while downloading model '{args.model}'.")
+        print("Check your internet connection or try again later.")
+        print(f"Details: {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: Invalid parameter for model loading.")
+        print(f"Model size: '{args.model}', Device: '{args.device}'")
+        print(f"Valid model sizes: tiny, base, small, medium, large")
+        print(f"Details: {e}")
+        sys.exit(1)
+    except ImportError as e:
+        print(f"Error: Required library not found.")
+        print("Make sure OpenAI Whisper is installed: pip install openai-whisper")
+        print(f"Details: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error initializing Whisper: {e}")
+        print(f"Unexpected error initializing Whisper: {e}")
+        print("Please check your installation and try again.")
         sys.exit(1)
 
     # Process files

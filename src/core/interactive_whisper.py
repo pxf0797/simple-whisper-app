@@ -14,6 +14,7 @@ import sounddevice as sd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from simple_whisper import SimpleWhisper, list_audio_devices
+from config_manager import ConfigManager
 
 # Try to import StreamWhisper
 try:
@@ -22,6 +23,103 @@ try:
 except ImportError:
     HAS_STREAM = False
     StreamWhisper = None
+
+
+def _deprecated_run_first_time_wizard():
+    """
+    Run first-time setup wizard for new users.
+    """
+    print("\n" + "="*60)
+    print("FIRST-TIME SETUP".center(60))
+    print("="*60)
+    print("\nWelcome to Simple Whisper!")
+    print("Let's set up your preferences for a better experience.\n")
+
+    # Initialize config manager
+    config = ConfigManager()
+
+    # Language selection
+    print("Language selection:")
+    print("- The default language is Chinese (zh).")
+    print("- You can choose another language or use auto-detection.\n")
+
+    # Show current default
+    current_lang = config.get_language()
+    print(f"Current default: {current_lang}")
+
+    choice = input("Do you want to change the default language? (y/N): ").strip().lower()
+    if choice == 'y':
+        language = select_language()
+        if language:
+            config.set_language(language)
+            print(f"Language set to: {language}")
+    else:
+        print(f"Keeping default language: {current_lang}")
+
+    # Audio device selection
+    print("\n" + "-"*60)
+    print("\nAudio device selection:")
+    print("- On macOS, we'll try to select the built-in microphone.")
+    print("- You can choose another device if needed.\n")
+
+    # Try to get macOS default microphone
+    import sys
+    if sys.platform == "darwin":
+        mac_device_id = config.get_mac_default_microphone_id()
+        if mac_device_id != -1:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            if 0 <= mac_device_id < len(devices):
+                device_name = devices[mac_device_id]['name']
+                print(f"Detected macOS built-in microphone: [{mac_device_id}] {device_name}")
+
+                choice = input(f"Use this microphone? (Y/n): ").strip().lower()
+                if choice != 'n':
+                    config.set_audio_device(mac_device_id)
+                    print(f"Microphone set to: {device_name}")
+
+                    # Skip manual selection
+                    config.mark_first_run_completed()
+                    config.save_config()
+
+                    print("\n" + "="*60)
+                    print("SETUP COMPLETE!".center(60))
+                    print("="*60)
+                    print("\nYour preferences have been saved.")
+                    print(f"Language: {config.get_language()}")
+                    print(f"Audio device ID: {config.get_audio_device()}")
+                    print("\nYou can change these settings anytime by editing:")
+                    print(f"  {config.config_file}")
+                    print("\nEnjoy using Simple Whisper!\n")
+                    return True
+
+    # Manual audio device selection
+    print("\nManual audio device selection:")
+    device_id = select_audio_device()
+    config.set_audio_device(device_id)
+
+    import sounddevice as sd
+    devices = sd.query_devices()
+    if 0 <= device_id < len(devices):
+        device_name = devices[device_id]['name']
+        print(f"Microphone set to: {device_name}")
+
+    # Save configuration
+    config.mark_first_run_completed()
+    success = config.save_config()
+
+    if success:
+        print("\n" + "="*60)
+        print("SETUP COMPLETE!".center(60))
+        print("="*60)
+        print("\nYour preferences have been saved.")
+        print(f"Language: {config.get_language()}")
+        print(f"Audio device ID: {config.get_audio_device()}")
+        print("\nYou can change these settings anytime by editing:")
+        print(f"  {config.config_file}")
+        print("\nEnjoy using Simple Whisper!\n")
+
+    return success
 
 
 def clear_screen():
@@ -191,6 +289,103 @@ def select_language():
         except KeyboardInterrupt:
             print("\nCancelled.")
             sys.exit(0)
+
+
+def run_first_time_wizard():
+    """
+    Run first-time setup wizard for new users.
+    """
+    print("\n" + "="*60)
+    print("FIRST-TIME SETUP".center(60))
+    print("="*60)
+    print("\nWelcome to Simple Whisper!")
+    print("Let's set up your preferences for a better experience.\n")
+
+    # Initialize config manager
+    config = ConfigManager()
+
+    # Language selection
+    print("Language selection:")
+    print("- The default language is Chinese (zh).")
+    print("- You can choose another language or use auto-detection.\n")
+
+    # Show current default
+    current_lang = config.get_language()
+    print(f"Current default: {current_lang}")
+
+    choice = input("Do you want to change the default language? (y/N): ").strip().lower()
+    if choice == 'y':
+        language = select_language()
+        if language:
+            config.set_language(language)
+            print(f"Language set to: {language}")
+    else:
+        print(f"Keeping default language: {current_lang}")
+
+    # Audio device selection
+    print("\n" + "-"*60)
+    print("\nAudio device selection:")
+    print("- On macOS, we'll try to select the built-in microphone.")
+    print("- You can choose another device if needed.\n")
+
+    # Try to get macOS default microphone
+    import sys
+    if sys.platform == "darwin":
+        mac_device_id = config.get_mac_default_microphone_id()
+        if mac_device_id != -1:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            if 0 <= mac_device_id < len(devices):
+                device_name = devices[mac_device_id]['name']
+                print(f"Detected macOS built-in microphone: [{mac_device_id}] {device_name}")
+
+                choice = input(f"Use this microphone? (Y/n): ").strip().lower()
+                if choice != 'n':
+                    config.set_audio_device(mac_device_id)
+                    print(f"Microphone set to: {device_name}")
+
+                    # Skip manual selection
+                    config.mark_first_run_completed()
+                    config.save_config()
+
+                    print("\n" + "="*60)
+                    print("SETUP COMPLETE!".center(60))
+                    print("="*60)
+                    print("\nYour preferences have been saved.")
+                    print(f"Language: {config.get_language()}")
+                    print(f"Audio device ID: {config.get_audio_device()}")
+                    print("\nYou can change these settings anytime by editing:")
+                    print(f"  {config.config_file}")
+                    print("\nEnjoy using Simple Whisper!\n")
+                    return True
+
+    # Manual audio device selection
+    print("\nManual audio device selection:")
+    device_id = select_audio_device()
+    config.set_audio_device(device_id)
+
+    import sounddevice as sd
+    devices = sd.query_devices()
+    if 0 <= device_id < len(devices):
+        device_name = devices[device_id]['name']
+        print(f"Microphone set to: {device_name}")
+
+    # Save configuration
+    config.mark_first_run_completed()
+    success = config.save_config()
+
+    if success:
+        print("\n" + "="*60)
+        print("SETUP COMPLETE!".center(60))
+        print("="*60)
+        print("\nYour preferences have been saved.")
+        print(f"Language: {config.get_language()}")
+        print(f"Audio device ID: {config.get_audio_device()}")
+        print("\nYou can change these settings anytime by editing:")
+        print(f"  {config.config_file}")
+        print("\nEnjoy using Simple Whisper!\n")
+
+    return success
 
 
 def select_recording_mode():
@@ -385,8 +580,29 @@ def run_transcription(params):
 
     except KeyboardInterrupt:
         print("\n\nTranscription cancelled.")
+    except RuntimeError as e:
+        print(f"\nError: Runtime error during transcription.")
+        if "CUDA" in str(e) or "GPU" in str(e):
+            print("GPU/CUDA error. Check your CUDA installation and GPU memory.")
+        elif "MPS" in str(e):
+            print("MPS (Apple Silicon) error. Check your PyTorch MPS support.")
+        elif "memory" in str(e).lower():
+            print("Memory error. Try using a smaller model or closing other applications.")
+        print(f"Details: {e}")
+        import traceback
+        traceback.print_exc()
+    except FileNotFoundError as e:
+        print(f"\nError: File not found: {e}")
+        print("Check if the audio file exists and is accessible.")
+        import traceback
+        traceback.print_exc()
+    except PermissionError as e:
+        print(f"\nError: Permission denied: {e}")
+        print("Check file permissions or choose a different location.")
+        import traceback
+        traceback.print_exc()
     except Exception as e:
-        print(f"\nError: {e}")
+        print(f"\nUnexpected error: {e}")
         import traceback
         traceback.print_exc()
 
@@ -395,6 +611,26 @@ def main():
     """Main interactive application."""
     clear_screen()
     print_header("SIMPLE WHISPER - INTERACTIVE MODE")
+
+    # Check for first-time setup
+    config = ConfigManager()
+    if config.is_first_run():
+        print("\nIt looks like this is your first time using Simple Whisper!")
+        print("Let's set up your preferences.\n")
+
+        # Ask if user wants to run setup
+        choice = input("Run first-time setup? (Y/n): ").strip().lower()
+        if choice != 'n':
+            run_first_time_wizard()
+            print("\nFirst-time setup completed. Continuing to main application...\n")
+            input("Press Enter to continue...")
+            clear_screen()
+            print_header("SIMPLE WHISPER - INTERACTIVE MODE")
+        else:
+            print("\nSkipping first-time setup. You can run it later from the configuration.\n")
+            input("Press Enter to continue...")
+            clear_screen()
+            print_header("SIMPLE WHISPER - INTERACTIVE MODE")
 
     try:
         # Get user preferences
@@ -426,9 +662,9 @@ def main():
             # Get chunk duration
             while True:
                 try:
-                    chunk_input = input("Chunk duration in seconds (default: 3.0): ").strip()
+                    chunk_input = input("Chunk duration in seconds (default: 2.0): ").strip()
                     if not chunk_input:
-                        params['chunk_duration'] = 3.0
+                        params['chunk_duration'] = 2.0
                         break
                     chunk_duration = float(chunk_input)
                     if chunk_duration <= 0:
@@ -442,9 +678,9 @@ def main():
             # Get overlap
             while True:
                 try:
-                    overlap_input = input("Overlap between chunks in seconds (default: 1.0): ").strip()
+                    overlap_input = input("Overlap between chunks in seconds (default: 0.5): ").strip()
                     if not overlap_input:
-                        params['overlap'] = 1.0
+                        params['overlap'] = 0.5
                         break
                     overlap = float(overlap_input)
                     if overlap < 0:
@@ -467,6 +703,22 @@ def main():
 
     except KeyboardInterrupt:
         print("\n\nApplication cancelled.")
+    except FileNotFoundError as e:
+        print(f"\nError: File or directory not found: {e}")
+        print("Check if the specified paths exist.")
+        import traceback
+        traceback.print_exc()
+    except PermissionError as e:
+        print(f"\nError: Permission denied: {e}")
+        print("Check file permissions or choose a different location.")
+        import traceback
+        traceback.print_exc()
+    except ImportError as e:
+        print(f"\nError: Missing required library: {e}")
+        print("Make sure all dependencies are installed.")
+        print("Run: pip install -r requirements.txt")
+        import traceback
+        traceback.print_exc()
     except Exception as e:
         print(f"\nUnexpected error: {e}")
         import traceback

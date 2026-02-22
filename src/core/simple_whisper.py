@@ -7,7 +7,19 @@ A minimal Python application for real-time audio recording and transcription usi
 import argparse
 import os
 import sys
+import threading
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Patch pkgutil for compatibility with Python 3.12+
+# Some libraries (webrtcvad, zhconv) still use pkg_resources which depends on pkgutil.ImpImporter
+# ImpImporter was removed in Python 3.12, so we provide a dummy implementation
+import pkgutil
+if not hasattr(pkgutil, 'ImpImporter'):
+    class ImpImporter:
+        """Dummy Importer for compatibility with pkg_resources"""
+        pass
+    pkgutil.ImpImporter = ImpImporter
+
 import time
 import wave
 import sounddevice as sd
@@ -39,8 +51,49 @@ def list_audio_devices():
     return devices
 
 
+def get_mac_default_microphone():
+    """
+    Get the default microphone for macOS systems.
+
+    Returns:
+        int: Device ID for macOS built-in microphone, or -1 for default device
+    """
+    import sys
+    if sys.platform == "darwin":  # macOS
+        import sounddevice as sd
+        devices = sd.query_devices()
+
+        # Priority search patterns for macOS built-in microphones
+        search_patterns = [
+            "mac",           # Generic Mac identifier
+            "built-in",      # Built-in microphone
+            "internal",      # Internal microphone
+            "default",       # Default input
+        ]
+
+        for i, device in enumerate(devices):
+            if device['max_input_channels'] > 0:  # Only input devices
+                device_name_lower = device['name'].lower()
+                for pattern in search_patterns:
+                    if pattern in device_name_lower:
+                        return i
+
+        # If no pattern matches, try to find device with "input" in name
+        for i, device in enumerate(devices):
+            if device['max_input_channels'] > 0:
+                if "input" in device['name'].lower():
+                    return i
+
+    # Return -1 to indicate use system default device
+    return -1
+
+
 class SimpleWhisper:
     """Simple Whisper application for recording and transcribing audio."""
+
+    # Class-level model cache to share models between instances
+    _model_cache = {}
+    _model_cache_lock = threading.Lock() if 'threading' in sys.modules else None
 
     def __init__(self, model_size="base", device=None, sample_rate=16000):
         """
@@ -55,11 +108,128 @@ class SimpleWhisper:
         self.model_size = model_size
 
         print(f"Loading Whisper model '{model_size}'...")
-        try:
-            self.model = whisper.load_model(model_size, device=device)
-            print(f"Model loaded successfully (running on {self.model.device}).")
-        except Exception as e:
-            print(f"Error loading model: {e}")
+
+        # Try to use mirror for model download if available
+        # This can help users in regions with limited access to Hugging Face
+        mirror_urls = [
+            "https://hf-mirror.com",  # Hugging Face mirror
+            "https://mirror.ghproxy.com/https://huggingface.co",  # GitHub proxy mirror
+        ]
+
+        # Check if HF_ENDPOINT is already set
+        if "HF_ENDPOINT" not in os.environ:
+            # Try each mirror in order
+            for mirror_url in mirror_urls:
+                try:
+                    # Test the mirror by attempting a simple HEAD request (or just set it)
+                    os.environ["HF_ENDPOINT"] = mirror_url
+                    print(f"Using Hugging Face mirror: {mirror_url}")
+                    break
+                except Exception:
+                    # If setting fails, try next mirror
+                    continue
+
+        # Retry configuration
+        max_retries = 3
+        retry_delay = 2  # seconds
+        last_exception = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                if attempt > 1:
+                    print(f"Retry attempt {attempt}/{max_retries}...")
+                    time.sleep(retry_delay * (attempt - 1))  # Exponential backoff
+
+                self.model = whisper.load_model(model_size, device=device)
+                print(f"Model loaded successfully (running on {self.model.device}).")
+                return  # Success, exit method
+
+            except ConnectionError as e:
+                # Network connection error - retryable
+                last_exception = e
+                print(f"Network error (attempt {attempt}/{max_retries}): {e}")
+                if attempt < max_retries:
+                    print(f"Retrying in {retry_delay * attempt} seconds...")
+                else:
+                    print(f"Error: Failed to download model '{model_size}' after {max_retries} attempts.")
+                    print("Check your internet connection or try again later.")
+                    print(f"Details: {e}")
+                    sys.exit(1)
+
+            except FileNotFoundError as e:
+                # File not found - not retryable
+                print(f"Error: Model file not found for '{model_size}'.")
+                print("The model may need to be downloaded. Whisper will download it automatically on first use.")
+                print(f"Details: {e}")
+                sys.exit(1)
+
+            except RuntimeError as e:
+                # Runtime error - check if it's a connection issue
+                if "download" in str(e).lower() or "connection" in str(e).lower():
+                    # Might be a download error, retry
+                    last_exception = e
+                    print(f"Download error (attempt {attempt}/{max_retries}): {e}")
+                    if attempt < max_retries:
+                        print(f"Retrying in {retry_delay * attempt} seconds...")
+                    else:
+                        print(f"Error: Failed to download model '{model_size}' after {max_retries} attempts.")
+                        if "CUDA" in str(e):
+                            print("CUDA/GPU error. Check your CUDA installation and GPU availability.")
+                        elif "MPS" in str(e):
+                            print("MPS (Apple Silicon) error. Check your PyTorch MPS support.")
+                        print(f"Details: {e}")
+                        sys.exit(1)
+                else:
+                    # Other runtime error - not retryable
+                    print(f"Error: Runtime error loading model '{model_size}'.")
+                    if "CUDA" in str(e):
+                        print("CUDA/GPU error. Check your CUDA installation and GPU availability.")
+                    elif "MPS" in str(e):
+                        print("MPS (Apple Silicon) error. Check your PyTorch MPS support.")
+                    print(f"Details: {e}")
+                    sys.exit(1)
+
+            except ValueError as e:
+                # Invalid parameter - not retryable
+                print(f"Error: Invalid parameter for model loading.")
+                print(f"Model size: '{model_size}', Device: '{device}'")
+                print(f"Valid model sizes: tiny, base, small, medium, large")
+                print(f"Details: {e}")
+                sys.exit(1)
+
+            except ImportError as e:
+                # Missing library - not retryable
+                print(f"Error: Required library not found.")
+                print("Make sure OpenAI Whisper is installed: pip install openai-whisper")
+                print(f"Details: {e}")
+                sys.exit(1)
+
+            except Exception as e:
+                # Other errors - retryable for network/download issues
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ['connection', 'download', 'network', 'timeout', 'ssl']):
+                    last_exception = e
+                    print(f"Network/download error (attempt {attempt}/{max_retries}): {e}")
+                    if attempt < max_retries:
+                        print(f"Retrying in {retry_delay * attempt} seconds...")
+                    else:
+                        print(f"Error: Failed to load model '{model_size}' after {max_retries} attempts.")
+                        print("Please check your installation and try again.")
+                        print(f"Details: {e}")
+                        sys.exit(1)
+                else:
+                    # Non-retryable error
+                    print(f"Unexpected error loading model '{model_size}': {e}")
+                    print("Please check your installation and try again.")
+                    sys.exit(1)
+
+        # If we get here, all retries failed
+        if last_exception:
+            print(f"Error: Failed to load model '{model_size}' after {max_retries} attempts.")
+            print(f"Last error: {last_exception}")
+            sys.exit(1)
+        else:
+            print(f"Error: Failed to load model '{model_size}' for unknown reason.")
             sys.exit(1)
 
     def _validate_device_id(self, device_id):
@@ -153,8 +323,37 @@ class SimpleWhisper:
                     print("No audio recorded.")
                     return None
 
+        except sd.PortAudioError as e:
+            print(f"Error: Audio device error during recording.")
+            print("Check if your microphone is connected and accessible.")
+            print(f"Device ID: {device_id}, Validated ID: {valid_device_id}")
+            print(f"Details: {e}")
+            return None
+        except FileNotFoundError as e:
+            print(f"Error: Output directory not found: {output_path}")
+            print("Make sure the directory exists or provide a different path.")
+            print(f"Details: {e}")
+            return None
+        except PermissionError as e:
+            print(f"Error: Permission denied when saving audio file.")
+            print(f"Cannot write to: {output_path}")
+            print("Check file permissions or choose a different location.")
+            print(f"Details: {e}")
+            return None
+        except ValueError as e:
+            print(f"Error: Invalid parameter for recording.")
+            print(f"Duration: {duration}, Sample rate: {self.sample_rate}")
+            print("Check recording parameters.")
+            print(f"Details: {e}")
+            return None
+        except OSError as e:
+            print(f"Error: System error during recording.")
+            print("Check audio system configuration.")
+            print(f"Details: {e}")
+            return None
         except Exception as e:
-            print(f"Error during recording: {e}")
+            print(f"Unexpected error during recording: {e}")
+            print("Please check your audio configuration and try again.")
             return None
 
         return output_path
@@ -257,8 +456,42 @@ class SimpleWhisper:
 
             return transcription_result
 
+        except FileNotFoundError as e:
+            print(f"Error: Audio file not found during transcription.")
+            print(f"File: {audio_path}")
+            print("Make sure the file exists and is accessible.")
+            print(f"Details: {e}")
+            return None
+        except RuntimeError as e:
+            print(f"Error: Runtime error during transcription.")
+            if "CUDA" in str(e) or "GPU" in str(e):
+                print("GPU/CUDA error. Check your CUDA installation and GPU memory.")
+            elif "MPS" in str(e):
+                print("MPS (Apple Silicon) error. Check your PyTorch MPS support.")
+            elif "memory" in str(e).lower():
+                print("Memory error. Try using a smaller model or closing other applications.")
+            print(f"Details: {e}")
+            return None
+        except ValueError as e:
+            print(f"Error: Invalid parameter or audio format.")
+            print(f"Audio file: {audio_path}, Language: {language}")
+            print("Check audio format (should be WAV, MP3, etc. supported by Whisper).")
+            print(f"Details: {e}")
+            return None
+        except OSError as e:
+            print(f"Error: System error reading audio file.")
+            print(f"File: {audio_path}")
+            print("Check file permissions and format.")
+            print(f"Details: {e}")
+            return None
+        except MemoryError as e:
+            print(f"Error: Insufficient memory for transcription.")
+            print("Try using a smaller model (tiny or base) or close other applications.")
+            print(f"Details: {e}")
+            return None
         except Exception as e:
-            print(f"Error during transcription: {e}")
+            print(f"Unexpected error during transcription: {e}")
+            print("Please check the audio file and try again.")
             return None
 
     def save_transcription(self, result, output_path=None):
@@ -322,9 +555,72 @@ class SimpleWhisper:
             print(f"Transcription saved to: {output_path}")
             return output_path
 
-        except Exception as e:
-            print(f"Error saving transcription: {e}")
+        except FileNotFoundError as e:
+            print(f"Error: Output directory not found: {output_path}")
+            print("Make sure the directory exists or provide a different path.")
+            print(f"Details: {e}")
             return None
+        except PermissionError as e:
+            print(f"Error: Permission denied when saving transcription.")
+            print(f"Cannot write to: {output_path}")
+            print("Check file permissions or choose a different location.")
+            print(f"Details: {e}")
+            return None
+        except IsADirectoryError as e:
+            print(f"Error: Output path is a directory, not a file: {output_path}")
+            print("Provide a full file path including filename.")
+            print(f"Details: {e}")
+            return None
+        except UnicodeEncodeError as e:
+            print(f"Error: Encoding error when saving transcription.")
+            print("The text contains characters that cannot be encoded in UTF-8.")
+            print(f"Details: {e}")
+            return None
+        except OSError as e:
+            print(f"Error: System error saving transcription file.")
+            print(f"File: {output_path}")
+            print("Check disk space and file system permissions.")
+            print(f"Details: {e}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error saving transcription: {e}")
+            print("Please check the output path and try again.")
+            return None
+
+    def unload_model(self):
+        """
+        Unload the Whisper model to free up memory.
+
+        This method releases the model from memory. Useful when the model is no longer needed
+        or when switching between different models.
+        """
+        if hasattr(self, 'model') and self.model is not None:
+            # Move model to CPU first to release GPU memory
+            try:
+                if str(self.model.device) != 'cpu':
+                    self.model.to('cpu')
+            except Exception as e:
+                print(f"Warning: Error moving model to CPU: {e}")
+
+            # Delete model reference
+            del self.model
+            self.model = None
+
+            # Force garbage collection
+            import gc
+            gc.collect()
+
+            print(f"Model '{self.model_size}' unloaded from memory.")
+        else:
+            print("No model loaded to unload.")
+
+    def __del__(self):
+        """Destructor to ensure model is unloaded when object is deleted."""
+        try:
+            self.unload_model()
+        except Exception:
+            # Ignore errors during destruction
+            pass
 
 def main():
     """Main entry point for the simple whisper application."""
@@ -363,16 +659,16 @@ def main():
     parser.add_argument("--input-device", type=int,
                        help="Audio input device ID for recording. Use --list-audio-devices to see available devices.")
     # Streaming options
-    parser.add_argument("--chunk-duration", type=float, default=3.0,
-                       help="Chunk duration in seconds for streaming (default: 3.0)")
-    parser.add_argument("--overlap", type=float, default=1.0,
-                       help="Overlap between chunks in seconds for streaming (default: 1.0)")
+    parser.add_argument("--chunk-duration", type=float, default=2.0,
+                       help="Chunk duration in seconds for streaming (default: 2.0)")
+    parser.add_argument("--overlap", type=float, default=0.5,
+                       help="Overlap between chunks in seconds for streaming (default: 0.5)")
     parser.add_argument("--no-vad", action="store_true",
                        help="Disable Voice Activity Detection for streaming (use fixed chunks)")
-    parser.add_argument("--vad-aggressiveness", type=int, default=3, choices=[0, 1, 2, 3],
-                       help="VAD aggressiveness for streaming (0=least, 3=most aggressive, default: 3)")
-    parser.add_argument("--silence-duration-ms", type=int, default=300,
-                       help="Minimum silence duration to end a sentence in milliseconds (default: 300)")
+    parser.add_argument("--vad-aggressiveness", type=int, default=2, choices=[0, 1, 2, 3],
+                       help="VAD aggressiveness for streaming (0=least, 3=most aggressive, default: 2)")
+    parser.add_argument("--silence-duration-ms", type=int, default=150,
+                       help="Minimum silence duration to end a sentence in milliseconds (default: 150)")
     parser.add_argument("--list-audio-devices", action="store_true",
                        help="List available audio input devices and exit.")
 

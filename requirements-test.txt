@@ -1,0 +1,20 @@
+# Test dependencies for Simple Whisper
+-r requirements.txt
+
+# Testing framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-xdist>=3.0.0
+
+# Mocking and testing utilities
+coverage>=7.0.0
+mock>=4.0.0  # For Python < 3.3, but included in unittest.mock in Python 3.3+
+
+# Code quality
+black>=22.0.0
+flake8>=5.0.0
+mypy>=0.991
+
+# Optional dependencies for specific tests
+zhconv>=1.4.2  # For Chinese text conversion tests

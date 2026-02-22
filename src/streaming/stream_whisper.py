@@ -53,9 +53,9 @@ class StreamWhisper(SimpleWhisper):
     """Streaming Whisper for real-time audio transcription."""
 
     def __init__(self, model_size="base", device=None, sample_rate=16000,
-                 chunk_duration=3.0, overlap=1.0, output_audio=None,
-                 output_text=None, use_vad=True, vad_aggressiveness=3,
-                 silence_duration_ms=300, language=None, simplified_chinese=None):
+                 chunk_duration=2.0, overlap=0.5, min_chunk_duration=1.0, output_audio=None,
+                 output_text=None, use_vad=True, vad_aggressiveness=2,
+                 silence_duration_ms=150, language=None, simplified_chinese=None):
         """
         Initialize the streaming Whisper model.
 
@@ -65,6 +65,7 @@ class StreamWhisper(SimpleWhisper):
             sample_rate (int): Sample rate for audio recording
             chunk_duration (float): Duration of each audio chunk in seconds (used if use_vad=False)
             overlap (float): Overlap between consecutive chunks in seconds (used if use_vad=False)
+            min_chunk_duration (float): Minimum chunk duration for processing (used if use_vad=False)
             output_audio (str): Path to save recorded audio
             use_vad (bool): Use Voice Activity Detection for sentence-based segmentation
             vad_aggressiveness (int): VAD aggressiveness (0-3, 3 most aggressive)
@@ -76,6 +77,7 @@ class StreamWhisper(SimpleWhisper):
 
         self.chunk_duration = chunk_duration
         self.overlap = overlap
+        self.min_chunk_duration = min_chunk_duration
         self.use_vad = use_vad
         self.vad_aggressiveness = vad_aggressiveness
         self.silence_duration_ms = silence_duration_ms
@@ -89,13 +91,14 @@ class StreamWhisper(SimpleWhisper):
         self.audio_buffer = []
         self.samples_per_chunk = int(chunk_duration * sample_rate)
         self.samples_overlap = int(overlap * sample_rate)
+        self.samples_per_min_chunk = int(min_chunk_duration * sample_rate)
 
         # VAD state (if use_vad=True)
         self.vad = None
         self.speech_buffer = []  # Buffer for current speech segment
         self.silence_frames = 0  # Count of consecutive silent frames
-        # We'll use 30ms frames for better accuracy
-        self.frame_duration_ms = 30  # Frame duration for VAD (10, 20 or 30 ms)
+        # We'll use 10ms frames for faster response
+        self.frame_duration_ms = 10  # Frame duration for VAD (10, 20 or 30 ms)
         self.samples_per_frame = int(sample_rate * self.frame_duration_ms / 1000)
 
         # Transcription context
@@ -157,8 +160,22 @@ class StreamWhisper(SimpleWhisper):
             # Check if we have enough data for a chunk
             buffer_length = sum(len(chunk) for chunk in self.audio_buffer)
             if buffer_length >= self.samples_per_chunk:
-                # Extract a chunk
-                chunk_data = self._extract_chunk_from_buffer()
+                # Extract a full chunk
+                chunk_data = self._extract_chunk_from_buffer(target_size=self.samples_per_chunk)
+                if chunk_data is not None:
+                    try:
+                        self.audio_queue.put(chunk_data, block=False)
+                    except queue.Full:
+                        # Drop oldest chunk if queue is full
+                        try:
+                            self.audio_queue.get_nowait()
+                            self.audio_queue.put(chunk_data, block=False)
+                        except queue.Empty:
+                            pass
+            # If we can't get a full chunk, try minimum chunk size
+            elif buffer_length >= self.samples_per_min_chunk:
+                # Extract a minimum chunk
+                chunk_data = self._extract_chunk_from_buffer(target_size=self.samples_per_min_chunk)
                 if chunk_data is not None:
                     try:
                         self.audio_queue.put(chunk_data, block=False)
@@ -249,14 +266,24 @@ class StreamWhisper(SimpleWhisper):
                         pass
                 self.speech_buffer = []
 
-    def _extract_chunk_from_buffer(self) -> Optional[np.ndarray]:
-        """Extract a chunk from the audio buffer."""
+    def _extract_chunk_from_buffer(self, target_size=None) -> Optional[np.ndarray]:
+        """Extract a chunk from the audio buffer.
+
+        Args:
+            target_size: Target number of samples to extract. If None, uses self.samples_per_chunk.
+
+        Returns:
+            Extracted audio chunk or None if insufficient data.
+        """
         if not self.audio_buffer:
             return None
 
+        if target_size is None:
+            target_size = self.samples_per_chunk
+
         # Collect enough samples for a chunk
         collected = []
-        remaining = self.samples_per_chunk
+        remaining = target_size
 
         while remaining > 0 and self.audio_buffer:
             chunk = self.audio_buffer[0]
@@ -271,7 +298,7 @@ class StreamWhisper(SimpleWhisper):
                 remaining = 0
 
         if remaining > 0:
-            # Not enough data for a full chunk
+            # Not enough data for a chunk
             # Return buffer to preserve data for next call
             self.audio_buffer = [np.concatenate(collected, axis=0)] if collected else []
             return None
@@ -280,7 +307,8 @@ class StreamWhisper(SimpleWhisper):
         chunk_data = np.concatenate(collected, axis=0)
 
         # Keep overlap in buffer for next chunk
-        if self.samples_overlap > 0 and len(chunk_data) > self.samples_overlap:
+        # Only keep overlap for full chunks, not for minimum chunks
+        if target_size == self.samples_per_chunk and self.samples_overlap > 0 and len(chunk_data) > self.samples_overlap:
             overlap_start = len(chunk_data) - self.samples_overlap
             overlap_data = chunk_data[overlap_start:].copy()
             self.audio_buffer.insert(0, overlap_data)
@@ -292,7 +320,7 @@ class StreamWhisper(SimpleWhisper):
         while self.is_streaming:
             try:
                 # Get audio chunk from queue
-                audio_chunk = self.audio_queue.get(timeout=0.1)
+                audio_chunk = self.audio_queue.get(timeout=0.01)
 
                 # Process chunk
                 result = self._transcribe_chunk(audio_chunk)
@@ -669,6 +697,38 @@ class StreamWhisper(SimpleWhisper):
         """Get the full transcription context with timestamps."""
         return self.transcription_context
 
+    def __del__(self):
+        """Destructor to ensure resources are cleaned up."""
+        try:
+            # Call parent's destructor if it exists
+            super().__del__()
+        except AttributeError:
+            # SimpleWhisper may not have __del__ method
+            pass
+
+        # Ensure streaming is stopped
+        if getattr(self, 'is_streaming', False):
+            try:
+                self.stop_streaming()
+            except Exception:
+                # Ignore errors during destruction
+                pass
+
+        # Close file handles if they're still open
+        if hasattr(self, 'sf_file') and self.sf_file is not None:
+            try:
+                self.sf_file.close()
+            except Exception:
+                pass
+            self.sf_file = None
+
+        if hasattr(self, 'text_file') and self.text_file is not None:
+            try:
+                self.text_file.close()
+            except Exception:
+                pass
+            self.text_file = None
+
 
 def main():
     """Test function for StreamWhisper."""
@@ -682,17 +742,19 @@ def main():
                        help="Computation device (cpu, cuda, mps)")
     parser.add_argument("--input-device", type=int,
                        help="Audio input device ID")
-    parser.add_argument("--chunk-duration", type=float, default=3.0,
+    parser.add_argument("--chunk-duration", type=float, default=2.0,
                        help="Chunk duration in seconds")
-    parser.add_argument("--overlap", type=float, default=1.0,
+    parser.add_argument("--overlap", type=float, default=0.5,
                        help="Overlap between chunks in seconds")
+    parser.add_argument("--min-chunk-duration", type=float, default=1.0,
+                       help="Minimum chunk duration for processing (seconds)")
     parser.add_argument("--duration", type=float, default=30.0,
                        help="Test duration in seconds")
     parser.add_argument("--no-vad", action="store_true",
                        help="Disable Voice Activity Detection (use fixed chunks)")
     parser.add_argument("--vad-aggressiveness", type=int, default=3, choices=[0, 1, 2, 3],
                        help="VAD aggressiveness (0=least, 3=most aggressive)")
-    parser.add_argument("--silence-duration-ms", type=int, default=300,
+    parser.add_argument("--silence-duration-ms", type=int, default=150,
                        help="Minimum silence duration to end a sentence (milliseconds)")
     parser.add_argument("--language", type=str,
                        help="Language code for transcription (e.g., 'en', 'zh'). Auto-detected if not specified.")
@@ -711,6 +773,7 @@ def main():
         device=args.device,
         chunk_duration=args.chunk_duration,
         overlap=args.overlap,
+        min_chunk_duration=args.min_chunk_duration,
         output_audio=args.output_audio,
         output_text=args.output_text,
         use_vad=not args.no_vad,
@@ -732,7 +795,7 @@ def main():
             if args.duration > 0:
                 # Run with time limit
                 while time.time() - start_time < args.duration:
-                    text = streamer.get_transcription(timeout=0.5, start_time=start_time)
+                    text = streamer.get_transcription(timeout=0.1, start_time=start_time)
                     if text:
                         print(f"[{time.time() - start_time:.1f}s] {text}")
 
@@ -743,7 +806,7 @@ def main():
             else:
                 # Run indefinitely until interrupted
                 while True:
-                    text = streamer.get_transcription(timeout=0.5, start_time=start_time)
+                    text = streamer.get_transcription(timeout=0.1, start_time=start_time)
                     if text:
                         print(f"[{time.time() - start_time:.1f}s] {text}")
 

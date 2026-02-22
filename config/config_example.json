@@ -1,11 +1,11 @@
 {
   "default_model": "base",
-  "default_language": null,
+  "default_language": "zh",
   "sample_rate": 16000,
   "output_directory": "./recordings",
   "save_audio": true,
   "save_transcription": true,
   "device": "auto",
-  "chunk_duration": 5,
+  "chunk_duration": 2,
   "silence_threshold": 0.01
 }

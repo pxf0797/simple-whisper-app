@@ -113,13 +113,13 @@ check_environment() {
     fi
 
     # Check for streaming dependencies
-    if [ -f "stream_whisper.py" ]; then
+    if [ -f "$PROJECT_ROOT/src/streaming/stream_whisper.py" ]; then
         log_message "INFO" "Streaming module found"
     else
         log_message "WARN" "Streaming module (stream_whisper.py) not found"
     fi
 
-    if [ -f "stream_gui.py" ]; then
+    if [ -f "$PROJECT_ROOT/src/streaming/stream_gui.py" ]; then
         log_message "INFO" "GUI module found"
     else
         log_message "WARN" "GUI module (stream_gui.py) not found"
@@ -219,7 +219,7 @@ streaming_mode() {
     echo -e "${CYAN}Streaming Mode Configuration${NC}"
     echo ""
 
-    if [ ! -f "stream_whisper.py" ]; then
+    if [ ! -f "$PROJECT_ROOT/src/streaming/stream_whisper.py" ]; then
         log_message "ERROR" "Streaming module not found"
         echo -e "${YELLOW}Streaming features require stream_whisper.py${NC}"
         read -p "Use CLI streaming instead? (y/n): " -n 1 -r
@@ -300,7 +300,7 @@ streaming_mode() {
             eval $CMD
             ;;
         3)
-            if [ -f "stream_gui.py" ]; then
+            if [ -f "$PROJECT_ROOT/src/streaming/stream_gui.py" ]; then
                 echo -e "${GREEN}Starting GUI streaming application...${NC}"
                 read -p "Model (tiny/base/small, default: tiny): " MODEL
                 MODEL=${MODEL:-tiny}
@@ -330,7 +330,7 @@ gui_mode() {
     echo -e "${CYAN}GUI Mode Configuration${NC}"
     echo ""
 
-    if [ ! -f "stream_gui.py" ]; then
+    if [ ! -f "$PROJECT_ROOT/src/streaming/stream_gui.py" ]; then
         log_message "ERROR" "GUI module not found"
         echo -e "${YELLOW}GUI features require stream_gui.py${NC}"
         return
@@ -607,7 +607,7 @@ print(f'  Model size: \"$TEST_MODEL\"')
             ;;
         5)
             echo -e "${GREEN}Testing streaming functionality...${NC}"
-            if [ -f "stream_whisper.py" ]; then
+            if [ -f "$PROJECT_ROOT/src/streaming/stream_whisper.py" ]; then
                 python $PROJECT_ROOT/src/streaming/stream_whisper.py --model tiny --duration 5 --chunk-duration 1.0
             else
                 echo -e "${YELLOW}Streaming module not available${NC}"

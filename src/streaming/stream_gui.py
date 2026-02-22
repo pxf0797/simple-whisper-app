@@ -383,9 +383,9 @@ def main():
                        help="Whisper model size")
     parser.add_argument("--device", type=int,
                        help="Audio input device ID")
-    parser.add_argument("--chunk-duration", type=float, default=3.0,
+    parser.add_argument("--chunk-duration", type=float, default=2.0,
                        help="Chunk duration in seconds")
-    parser.add_argument("--overlap", type=float, default=1.0,
+    parser.add_argument("--overlap", type=float, default=0.5,
                        help="Overlap between chunks in seconds")
 
     args = parser.parse_args()

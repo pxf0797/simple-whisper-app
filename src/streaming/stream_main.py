@@ -35,7 +35,7 @@ class StreamWhisperApp:
     """Main controller for streaming transcription application."""
 
     def __init__(self, model_size: str = "tiny", device_id: Optional[int] = None,
-                 chunk_duration: float = 3.0, overlap: float = 1.0,
+                 chunk_duration: float = 2.0, overlap: float = 0.5,
                  use_gui: bool = True, language: Optional[str] = None):
         """
         Initialize the streaming application.
@@ -346,9 +346,9 @@ def main():
                        help="Whisper model size")
     parser.add_argument("--device", type=int,
                        help="Audio input device ID")
-    parser.add_argument("--chunk-duration", type=float, default=3.0,
+    parser.add_argument("--chunk-duration", type=float, default=2.0,
                        help="Chunk duration in seconds")
-    parser.add_argument("--overlap", type=float, default=1.0,
+    parser.add_argument("--overlap", type=float, default=0.5,
                        help="Overlap between chunks in seconds")
     parser.add_argument("--language", type=str,
                        help="Language code for transcription")
