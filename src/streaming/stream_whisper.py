@@ -14,6 +14,7 @@ import threading
 import queue
 import numpy as np
 import sounddevice as sd
+import soundfile as sf
 import whisper
 from typing import Optional, Dict, List, Tuple
 from core.simple_whisper import SimpleWhisper
@@ -23,7 +24,7 @@ class StreamWhisper(SimpleWhisper):
     """Streaming Whisper for real-time audio transcription."""
 
     def __init__(self, model_size="base", device=None, sample_rate=16000,
-                 chunk_duration=3.0, overlap=1.0):
+                 chunk_duration=3.0, overlap=1.0, output_audio=None):
         """
         Initialize the streaming Whisper model.
 
@@ -56,6 +57,10 @@ class StreamWhisper(SimpleWhisper):
         self.audio_thread = None
         self.processing_thread = None
 
+        # Audio recording
+        self.output_audio = output_audio
+        self.sf_file = None
+
         print(f"StreamWhisper initialized: {chunk_duration}s chunks, {overlap}s overlap")
 
     def _audio_callback(self, indata, frames, time_info, status):
@@ -65,6 +70,14 @@ class StreamWhisper(SimpleWhisper):
 
         # Add to audio buffer
         self.audio_buffer.append(indata.copy())
+
+        # Write to audio file if recording
+        if self.sf_file is not None:
+            try:
+                self.sf_file.write(indata)
+            except Exception as e:
+                print(f"Warning: Error writing audio data: {e}")
+                self.sf_file = None
 
         # Check if we have enough data for a chunk
         buffer_length = sum(len(chunk) for chunk in self.audio_buffer)
@@ -274,6 +287,15 @@ class StreamWhisper(SimpleWhisper):
                 device=valid_device_id
             )
 
+            # Open audio file for recording if output_audio is specified
+            if self.output_audio:
+                try:
+                    self.sf_file = sf.SoundFile(self.output_audio, mode='w', samplerate=self.sample_rate, channels=1, subtype='PCM_16')
+                    print(f"Audio recording to: {self.output_audio}")
+                except Exception as e:
+                    print(f"Warning: Could not open audio file for recording: {e}")
+                    self.sf_file = None
+
             self.stream.start()
             print(f"Audio streaming started on device {valid_device_id or 'default'}")
 
@@ -319,6 +341,16 @@ class StreamWhisper(SimpleWhisper):
             except queue.Empty:
                 break
 
+        # Close audio file if recording
+        if self.sf_file is not None:
+            try:
+                self.sf_file.close()
+                print(f"Audio recording saved to: {self.output_audio}")
+            except Exception as e:
+                print(f"Warning: Error closing audio file: {e}")
+            finally:
+                self.sf_file = None
+
         print("Streaming stopped")
 
     def get_transcription(self, timeout: float = 0.1) -> Optional[str]:
@@ -347,9 +379,34 @@ class StreamWhisper(SimpleWhisper):
 
         return None
 
-    def get_full_transcription(self) -> str:
-        """Get full transcription from context."""
-        return " ".join([r.get("text", "") for r in self.transcription_context if r.get("text")])
+    def get_full_transcription(self, with_timestamps: bool = False, start_time: float = None) -> str:
+        """
+        Get full transcription from context.
+
+        Args:
+            with_timestamps: If True, include timestamps in output
+            start_time: Reference start time for relative timestamps (required if with_timestamps=True)
+
+        Returns:
+            Transcription text
+        """
+        if with_timestamps and start_time is not None:
+            lines = []
+            for result in self.transcription_context:
+                if result.get("text"):
+                    timestamp = result.get("timestamp")
+                    if timestamp:
+                        rel_time = timestamp - start_time
+                        lines.append(f"[{rel_time:.1f}s] {result['text']}")
+                    else:
+                        lines.append(result['text'])
+            return "\n".join(lines)
+        else:
+            return " ".join([r.get("text", "") for r in self.transcription_context if r.get("text")])
+
+    def get_transcription_context(self) -> list:
+        """Get the full transcription context with timestamps."""
+        return self.transcription_context
 
 
 def main():

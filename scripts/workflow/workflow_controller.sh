@@ -566,13 +566,13 @@ except:
 
     # Generate output filenames
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-    AUDIO_FILE="record/recording_${TIMESTAMP}.wav"
-    TEXT_FILE="record/recording_${TIMESTAMP}_transcription.txt"
+    AUDIO_FILE="$PROJECT_ROOT/record/recording_${TIMESTAMP}.wav"
+    TEXT_FILE="$PROJECT_ROOT/record/recording_${TIMESTAMP}_transcription.txt"
 
-    mkdir -p record
+    mkdir -p "$PROJECT_ROOT/record"
 
     # Build command
-    CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record --model $MODEL --output-audio $AUDIO_FILE --output-text $TEXT_FILE"
+    CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --record --model $MODEL --output-audio \"$AUDIO_FILE\" --output-text \"$TEXT_FILE\""
 
     if [ -n "$LANGUAGE" ]; then
         CMD="$CMD --language $LANGUAGE"
@@ -908,8 +908,15 @@ except:
         fi
     fi
 
+    # Generate output filenames for streaming
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    TEXT_FILE="$PROJECT_ROOT/record/streaming_${TIMESTAMP}_transcription.txt"
+    AUDIO_FILE="$PROJECT_ROOT/record/streaming_${TIMESTAMP}.wav"
+
+    mkdir -p "$PROJECT_ROOT/record"
+
     if [ "$USE_SIMPLE_STREAM" = true ]; then
-        CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --stream --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
+        CMD="python $PROJECT_ROOT/src/core/simple_whisper.py --stream --model $MODEL --chunk-duration $CHUNK_DUR --overlap $OVERLAP --output-text \"$TEXT_FILE\" --output-audio \"$AUDIO_FILE\""
     else
         CMD="python $PROJECT_ROOT/src/streaming/stream_whisper.py --model $MODEL --duration $DURATION --chunk-duration $CHUNK_DUR --overlap $OVERLAP"
     fi
@@ -963,6 +970,10 @@ except:
     echo "  Duration: $DURATION seconds"
     echo "  Chunk duration: $CHUNK_DUR seconds"
     echo "  Overlap: $OVERLAP seconds"
+    if [ "$USE_SIMPLE_STREAM" = true ]; then
+        echo "  Text output: $TEXT_FILE"
+        echo "  Audio output: $AUDIO_FILE"
+    fi
     echo "  Command: $CMD"
     echo ""
 

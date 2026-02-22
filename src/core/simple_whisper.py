@@ -436,7 +436,8 @@ def main():
             model_size=args.model,
             device=args.device,
             chunk_duration=args.chunk_duration,
-            overlap=args.overlap
+            overlap=args.overlap,
+            output_audio=args.output_audio
         )
 
         # Start streaming
@@ -460,9 +461,49 @@ def main():
         except KeyboardInterrupt:
             print("\n\nStreaming stopped by user.")
         finally:
+            # Get transcription context before stopping streaming
+            transcription_context = []
+            if hasattr(streamer, 'get_transcription_context'):
+                transcription_context = streamer.get_transcription_context()
+
             streamer.stop_streaming()
+
+            # Get full transcription with timestamps for display and saving
+            full_text = streamer.get_full_transcription(with_timestamps=True, start_time=start_time)
             print("\nFull transcription:")
-            print(streamer.get_full_transcription())
+            print(full_text)
+
+            # Save transcription if output text path is provided
+            if args.output_text:
+                # Create segments from transcription context
+                segments = []
+                for i, item in enumerate(transcription_context):
+                    if item.get("text"):
+                        timestamp = item.get("timestamp")
+                        if timestamp:
+                            start = timestamp - start_time
+                            # Assume each chunk is about chunk_duration seconds
+                            end = start + args.chunk_duration
+                        else:
+                            # Fallback: estimate based on index
+                            start = i * (args.chunk_duration - args.overlap)
+                            end = start + args.chunk_duration
+
+                        segments.append({
+                            "start": start,
+                            "end": end,
+                            "text": item["text"]
+                        })
+
+                result = {
+                    "text": full_text,  # This includes timestamps
+                    "segments": segments,
+                    "language": getattr(streamer, 'language', 'unknown'),
+                    "simplified_chinese": args.simplified_chinese
+                }
+                saved_path = streamer.save_transcription(result, output_path=args.output_text)
+                if saved_path:
+                    print(f"\nTranscription saved to: {saved_path}")
 
         # Exit after streaming (don't continue to transcription step)
         return
