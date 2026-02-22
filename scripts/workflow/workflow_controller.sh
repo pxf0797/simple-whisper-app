@@ -791,8 +791,6 @@ execute_live_streaming() {
             # Quick setup - fast model, auto language, default device
             echo -e "${GREEN}Using quick setup (fast model, auto language)${NC}"
             MODEL="tiny"
-            LANGUAGE=""
-            SIMPLIFIED_CHINESE=""
             DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
@@ -800,13 +798,55 @@ execute_live_streaming() {
             NO_VAD=""
             VAD_AGGRESSIVENESS="3"
             SILENCE_DURATION_MS="300"
+
+            # Language selection (optional)
+            echo -e "${BLUE}Language Configuration:${NC}"
+            read -p "Use auto language detection? (y/n, default: y): " AUTO_LANG
+            AUTO_LANG=$(echo "$AUTO_LANG" | tr -d '[:space:]')
+            if [[ "$AUTO_LANG" =~ ^[Nn]$ ]]; then
+                LANGUAGE_RESULT=$(select_language_interactive)
+                # Parse language result (may contain simplified chinese setting)
+                LANGUAGE=""
+                SIMPLIFIED_CHINESE=""
+                if [ -n "$LANGUAGE_RESULT" ]; then
+                    if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+                        # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+                        LANGUAGE="${LANGUAGE_RESULT%:*}"
+                        SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+                    else
+                        LANGUAGE="$LANGUAGE_RESULT"
+                    fi
+                fi
+            else
+                LANGUAGE=""
+                SIMPLIFIED_CHINESE=""
+            fi
+
+            # Audio device selection (optional)
+            echo -e "${BLUE}Audio Device Configuration:${NC}"
+            read -p "Use default audio device? (y/n, default: y): " DEFAULT_AUDIO
+            DEFAULT_AUDIO=$(echo "$DEFAULT_AUDIO" | tr -d '[:space:]')
+            if [[ "$DEFAULT_AUDIO" =~ ^[Nn]$ ]]; then
+                INPUT_DEVICE=$(select_audio_device_interactive)
+            else
+                echo "Getting default audio device..."
+                INPUT_DEVICE=$(python -c "
+import sounddevice as sd
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+                if [ -z "$INPUT_DEVICE" ]; then
+                    INPUT_DEVICE=""
+                fi
+            fi
             ;;
         2)
             # Standard setup - balanced performance
             echo -e "${GREEN}Using standard setup (balanced performance)${NC}"
             MODEL="base"
-            LANGUAGE=""
-            SIMPLIFIED_CHINESE=""
             DURATION=30
             CHUNK_DUR=3.0
             OVERLAP=1.0
@@ -814,13 +854,55 @@ execute_live_streaming() {
             NO_VAD=""
             VAD_AGGRESSIVENESS="3"
             SILENCE_DURATION_MS="300"
+
+            # Language selection (optional)
+            echo -e "${BLUE}Language Configuration:${NC}"
+            read -p "Use auto language detection? (y/n, default: y): " AUTO_LANG
+            AUTO_LANG=$(echo "$AUTO_LANG" | tr -d '[:space:]')
+            if [[ "$AUTO_LANG" =~ ^[Nn]$ ]]; then
+                LANGUAGE_RESULT=$(select_language_interactive)
+                # Parse language result (may contain simplified chinese setting)
+                LANGUAGE=""
+                SIMPLIFIED_CHINESE=""
+                if [ -n "$LANGUAGE_RESULT" ]; then
+                    if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+                        # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+                        LANGUAGE="${LANGUAGE_RESULT%:*}"
+                        SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+                    else
+                        LANGUAGE="$LANGUAGE_RESULT"
+                    fi
+                fi
+            else
+                LANGUAGE=""
+                SIMPLIFIED_CHINESE=""
+            fi
+
+            # Audio device selection (optional)
+            echo -e "${BLUE}Audio Device Configuration:${NC}"
+            read -p "Use default audio device? (y/n, default: y): " DEFAULT_AUDIO
+            DEFAULT_AUDIO=$(echo "$DEFAULT_AUDIO" | tr -d '[:space:]')
+            if [[ "$DEFAULT_AUDIO" =~ ^[Nn]$ ]]; then
+                INPUT_DEVICE=$(select_audio_device_interactive)
+            else
+                echo "Getting default audio device..."
+                INPUT_DEVICE=$(python -c "
+import sounddevice as sd
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+                if [ -z "$INPUT_DEVICE" ]; then
+                    INPUT_DEVICE=""
+                fi
+            fi
             ;;
         3)
             # High quality setup - maximum accuracy
             echo -e "${GREEN}Using high quality setup (maximum accuracy)${NC}"
             MODEL="medium"
-            LANGUAGE=""
-            SIMPLIFIED_CHINESE=""
             DURATION=30
             CHUNK_DUR=5.0
             OVERLAP=2.0
@@ -828,6 +910,50 @@ execute_live_streaming() {
             NO_VAD=""
             VAD_AGGRESSIVENESS="3"
             SILENCE_DURATION_MS="300"
+
+            # Language selection (optional)
+            echo -e "${BLUE}Language Configuration:${NC}"
+            read -p "Use auto language detection? (y/n, default: y): " AUTO_LANG
+            AUTO_LANG=$(echo "$AUTO_LANG" | tr -d '[:space:]')
+            if [[ "$AUTO_LANG" =~ ^[Nn]$ ]]; then
+                LANGUAGE_RESULT=$(select_language_interactive)
+                # Parse language result (may contain simplified chinese setting)
+                LANGUAGE=""
+                SIMPLIFIED_CHINESE=""
+                if [ -n "$LANGUAGE_RESULT" ]; then
+                    if [[ "$LANGUAGE_RESULT" == *:* ]]; then
+                        # Format: "language:simplified" or "multi:lang1,lang2:simplified"
+                        LANGUAGE="${LANGUAGE_RESULT%:*}"
+                        SIMPLIFIED_CHINESE="${LANGUAGE_RESULT##*:}"
+                    else
+                        LANGUAGE="$LANGUAGE_RESULT"
+                    fi
+                fi
+            else
+                LANGUAGE=""
+                SIMPLIFIED_CHINESE=""
+            fi
+
+            # Audio device selection (optional)
+            echo -e "${BLUE}Audio Device Configuration:${NC}"
+            read -p "Use default audio device? (y/n, default: y): " DEFAULT_AUDIO
+            DEFAULT_AUDIO=$(echo "$DEFAULT_AUDIO" | tr -d '[:space:]')
+            if [[ "$DEFAULT_AUDIO" =~ ^[Nn]$ ]]; then
+                INPUT_DEVICE=$(select_audio_device_interactive)
+            else
+                echo "Getting default audio device..."
+                INPUT_DEVICE=$(python -c "
+import sounddevice as sd
+try:
+    default = sd.default.device[0]
+    print(default)
+except:
+    print('')
+")
+                if [ -z "$INPUT_DEVICE" ]; then
+                    INPUT_DEVICE=""
+                fi
+            fi
             ;;
         4)
             # Custom setup - interactive selection
@@ -858,8 +984,17 @@ execute_live_streaming() {
             # Computation device selection
             DEVICE=$(select_device_interactive)
 
-            read -p "Test duration in seconds (default: 30): " DURATION
-            DURATION=${DURATION:-30}
+            echo "Recording duration in seconds (press Enter for no time limit, 0 for unlimited, or enter a number):"
+            read -p "Duration (Enter for unlimited, 0 for unlimited, or number for seconds): " DURATION_INPUT
+            # Clean input
+            DURATION_INPUT=$(echo "$DURATION_INPUT" | tr -d '[:space:]')
+            if [ -z "$DURATION_INPUT" ] || [ "$DURATION_INPUT" = "0" ]; then
+                # Empty input or 0 means unlimited (no time limit)
+                DURATION=0
+            else
+                # Use the number provided
+                DURATION="$DURATION_INPUT"
+            fi
 
             read -p "Chunk duration in seconds (default: 3.0): " CHUNK_DUR
             CHUNK_DUR=${CHUNK_DUR:-3.0}
@@ -942,28 +1077,6 @@ execute_live_streaming() {
     # Computation device selection (if not specified via command line)
     if [ -z "$DEVICE" ]; then
         DEVICE=$(select_device_interactive)
-    fi
-
-    # For preset modes (1-3), get default audio device
-    if [ "$CONFIG_MODE" -le 3 ]; then
-        echo "Getting default audio device..."
-        INPUT_DEVICE=$(python -c "
-import sounddevice as sd
-try:
-    default = sd.default.device[0]
-    print(default)
-except:
-    print('')
-")
-        if [ -z "$INPUT_DEVICE" ]; then
-            INPUT_DEVICE=""
-        fi
-
-        # Override with command line argument if provided
-        if [ -n "$INPUT_DEVICE_ARG" ]; then
-            INPUT_DEVICE="$INPUT_DEVICE_ARG"
-            echo -e "${GREEN}Overriding audio device to: $INPUT_DEVICE${NC}"
-        fi
     fi
 
     # Generate output filenames for streaming

@@ -663,19 +663,34 @@ def main():
         simplified_chinese=args.simplified_chinese
     )
 
-    print(f"Starting streaming for {args.duration} seconds...")
+    # Determine if we're running with a time limit
+    if args.duration > 0:
+        print(f"Starting streaming for {args.duration} seconds...")
+    else:
+        print("Starting streaming (no time limit, press Ctrl+C to stop)...")
+
     if streamer.start_streaming(device_id=args.input_device):
         try:
             start_time = time.time()
-            while time.time() - start_time < args.duration:
-                text = streamer.get_transcription(timeout=0.5)
-                if text:
-                    print(f"[{time.time() - start_time:.1f}s] {text}")
+            if args.duration > 0:
+                # Run with time limit
+                while time.time() - start_time < args.duration:
+                    text = streamer.get_transcription(timeout=0.5)
+                    if text:
+                        print(f"[{time.time() - start_time:.1f}s] {text}")
 
-                time.sleep(0.1)
+                    time.sleep(0.1)
 
-            print("\nFull transcription:")
-            print(streamer.get_full_transcription())
+                print("\nFull transcription:")
+                print(streamer.get_full_transcription())
+            else:
+                # Run indefinitely until interrupted
+                while True:
+                    text = streamer.get_transcription(timeout=0.5)
+                    if text:
+                        print(f"[{time.time() - start_time:.1f}s] {text}")
+
+                    time.sleep(0.1)
 
         except KeyboardInterrupt:
             print("\nInterrupted by user")
