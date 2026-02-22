@@ -37,14 +37,59 @@ else
     echo "Skipping zhconv installation."
 fi
 
+# Optional: Voice Activity Detection (VAD)
+echo ""
+echo "5. Optional: Voice Activity Detection (VAD)..."
+read -p "Install webrtcvad for sentence-based transcription? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Check Python version for compatibility
+    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+    echo "Python version: $PYTHON_VERSION"
+    IS_PYTHON_312_OR_LATER=$(python3 -c "
+import sys
+version = sys.version_info
+if version.major > 3 or (version.major == 3 and version.minor >= 12):
+    print('1')
+else:
+    print('0')
+" | tr -d '\n')
+
+    if [ "$IS_PYTHON_312_OR_LATER" = "1" ]; then
+        echo "Python 3.12+ detected. Installing setuptools<60 for compatibility..."
+        if pip install 'setuptools<60'; then
+            echo "✓ setuptools<60 installed"
+        else
+            echo "⚠ Could not install setuptools<60, trying anyway..."
+        fi
+    fi
+
+    if pip install webrtcvad; then
+        echo "✓ webrtcvad installed"
+    else
+        echo "⚠ Failed to install webrtcvad. You may need to install it manually."
+        echo "  For Python 3.12+: pip install 'setuptools<60' && pip install webrtcvad"
+        echo "  For older Python: pip install webrtcvad"
+    fi
+else
+    echo "Skipping webrtcvad installation."
+fi
+
 # Verify installations
 echo ""
-echo "5. Verifying installations..."
+echo "6. Verifying installations..."
 python3 -c "import torch; print(f'✓ PyTorch {torch.__version__}')"
 python3 -c "import whisper; print(f'✓ Whisper {whisper.__version__}')"
 python3 -c "import sounddevice; print('✓ sounddevice')"
 python3 -c "import soundfile; print('✓ soundfile')"
 python3 -c "import numpy; print(f'✓ NumPy {numpy.__version__}')"
+python3 -c "
+try:
+    import webrtcvad
+    print('✓ webrtcvad (VAD)')
+except ImportError:
+    print('⚠ webrtcvad not installed (optional for sentence-based transcription)')
+"
 
 echo ""
 echo "Installation completed successfully!"

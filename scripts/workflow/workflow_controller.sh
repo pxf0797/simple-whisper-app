@@ -186,25 +186,94 @@ check_vad_compatibility() {
     else
         echo -e "${YELLOW}⚠ webrtcvad is not available${NC}"
         echo ""
-        echo "Voice Activity Detection (VAD) is required for sentence-based transcription."
-        echo "Without VAD, the system will use fixed chunk mode instead of sentence-based segmentation."
-        echo ""
-        echo "Possible solutions:"
-        echo "1. Install webrtcvad (may require setuptools<60 for Python 3.12+):"
-        echo "   pip install 'setuptools<60'"
-        echo "   pip install webrtcvad"
-        echo ""
-        echo "2. Or disable VAD and use fixed chunk mode (less accurate for sentence detection)"
+        echo "Voice Activity Detection (VAD) enables sentence-based transcription."
+        echo "Without VAD, the system will use fixed chunk mode (slightly less accurate)."
         echo ""
 
-        read -p "Continue without VAD? (y/n, default: y): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Nn]$ ]]; then
-            echo "You can install webrtcvad manually and try again."
-            return 1
-        fi
-        VAD_AVAILABLE=0
-        return 0
+        # Detect Python version for appropriate installation instructions
+        PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+        echo "Python version detected: $PYTHON_VERSION"
+
+        # Check if this is Python 3.12+
+        IS_PYTHON_312_OR_LATER=$(python3 -c "
+import sys
+version = sys.version_info
+if version.major > 3 or (version.major == 3 and version.minor >= 12):
+    print('1')
+else:
+    print('0')
+" | tr -d '\n')
+
+        echo ""
+        echo "Options:"
+        echo "1) Attempt automatic installation of webrtcvad"
+        echo "2) Continue without VAD (fixed chunk mode)"
+        echo "3) Exit and install manually"
+        echo ""
+
+        while true; do
+            read -p "Select option (1-3, default: 2): " vad_choice
+            vad_choice=${vad_choice:-2}
+
+            case $vad_choice in
+                1)
+                    echo -e "${GREEN}Attempting to install webrtcvad...${NC}"
+
+                    # For Python 3.12+, we need setuptools<60
+                    if [ "$IS_PYTHON_312_OR_LATER" = "1" ]; then
+                        echo "Python 3.12+ detected, installing setuptools<60 first..."
+                        if pip install 'setuptools<60'; then
+                            echo -e "${GREEN}✓ setuptools<60 installed${NC}"
+                        else
+                            echo -e "${YELLOW}⚠ Failed to install setuptools<60, trying anyway...${NC}"
+                        fi
+                    fi
+
+                    echo "Installing webrtcvad..."
+                    if pip install webrtcvad; then
+                        echo -e "${GREEN}✓ webrtcvad installed successfully${NC}"
+
+                        # Verify installation
+                        if python3 -c "import webrtcvad" 2>/dev/null; then
+                            echo -e "${GREEN}✓ webrtcvad import verified${NC}"
+                            VAD_AVAILABLE=1
+                            return 0
+                        else
+                            echo -e "${YELLOW}⚠ webrtcvad installed but import failed${NC}"
+                            echo "Continuing without VAD..."
+                            VAD_AVAILABLE=0
+                            return 0
+                        fi
+                    else
+                        echo -e "${RED}✗ Failed to install webrtcvad${NC}"
+                        echo "Continuing without VAD..."
+                        VAD_AVAILABLE=0
+                        return 0
+                    fi
+                    ;;
+                2)
+                    echo -e "${GREEN}Continuing without VAD (fixed chunk mode)${NC}"
+                    VAD_AVAILABLE=0
+                    return 0
+                    ;;
+                3)
+                    echo "Manual installation instructions:"
+                    echo ""
+                    if [ "$IS_PYTHON_312_OR_LATER" = "1" ]; then
+                        echo "For Python 3.12+, first install compatible setuptools:"
+                        echo "  pip install 'setuptools<60'"
+                    fi
+                    echo "Then install webrtcvad:"
+                    echo "  pip install webrtcvad"
+                    echo ""
+                    echo "After installation, run the workflow again."
+                    return 1
+                    ;;
+                *)
+                    echo "Please enter 1, 2, or 3"
+                    ;;
+            esac
+        done
     fi
 }
 
@@ -815,7 +884,7 @@ execute_live_streaming() {
 
     # Check VAD compatibility
     if ! check_vad_compatibility; then
-        echo -e "${YELLOW}VAD check failed. Exiting streaming workflow.${NC}"
+        echo -e "${YELLOW}User chose to exit. Exiting streaming workflow.${NC}"
         return 1
     fi
 
